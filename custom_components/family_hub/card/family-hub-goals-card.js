@@ -51,7 +51,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -1197,9 +1197,9 @@ class FamilyHubGoalsCard extends HTMLElement {
     return this._catalog.find((it) => it.id === id) || null;
   }
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   _escAttr(s) {
     return this._esc(s).replace(/"/g, "&quot;");
@@ -1482,7 +1482,7 @@ class FamilyHubGoalsCard extends HTMLElement {
     const g = goal || {};
     const rewardType = g.reward_type || GOAL_REWARD_TYPE_STARS;
     const catalogOptions = this._catalog
-      .map((it) => `<option value="${it.id}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${it.cost_stars}&#11088;)</option>`)
+      .map((it) => `<option value="${__fhEsc(it.id)}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${__fhEsc(it.cost_stars)}&#11088;)</option>`)
       .join("");
     return `
       <label>${this._t("goals.reward_label", "Reward")}
@@ -1491,7 +1491,7 @@ class FamilyHubGoalsCard extends HTMLElement {
           <option value="${GOAL_REWARD_TYPE_CATALOG_ITEM}" ${rewardType === GOAL_REWARD_TYPE_CATALOG_ITEM ? "selected" : ""}>${this._t("goals.reward_type_catalog_item", "A specific reward from the catalog")}</option>
         </select>
       </label>
-      <label class="f-star-value-field">${this._t("goals.how_many_stars_label", "How many stars")}<input type="number" class="f-star-value" min="1" value="${g.star_value || 1}"></label>
+      <label class="f-star-value-field">${this._t("goals.how_many_stars_label", "How many stars")}<input type="number" class="f-star-value" min="1" value="${__fhEsc(g.star_value || 1)}"></label>
       <label class="f-reward-item-field">${this._t("goals.which_reward_label", "Which reward")}<select class="f-reward-item">${catalogOptions}</select></label>
     `;
   }
@@ -1522,7 +1522,7 @@ class FamilyHubGoalsCard extends HTMLElement {
   _openCreateModal() {
     const overlay = this._root.querySelector(".create-modal");
     const box = overlay.querySelector(".modal-box");
-    const userOptions = this._memberUsers().map((u) => `<option value="${u.id}">${this._esc(u.name)}</option>`).join("");
+    const userOptions = this._memberUsers().map((u) => `<option value="${__fhEsc(u.id)}">${this._esc(u.name)}</option>`).join("");
     box.innerHTML = `
       <h3>${this._t("goals.add_a_goal", "Add a goal")}</h3>
       <label>${this._t("goals.title_label", "Title")}<input data-fh-placeholder="text.get_3_bs_in_math" type="text" class="f-title" placeholder="${__fhT("text.get_3_bs_in_math", "Get 3 Bs in math", null, "h")}"></label>
@@ -1582,13 +1582,13 @@ class FamilyHubGoalsCard extends HTMLElement {
     const overlay = this._root.querySelector(".edit-modal");
     const box = overlay.querySelector(".modal-box");
     const userOptions = this._memberUsers()
-      .map((u) => `<option value="${u.id}" ${goal.assigned_to === u.id ? "selected" : ""}>${this._esc(u.name)}</option>`)
+      .map((u) => `<option value="${__fhEsc(u.id)}" ${goal.assigned_to === u.id ? "selected" : ""}>${this._esc(u.name)}</option>`)
       .join("");
     box.innerHTML = `
       <h3>${this._t("goals.edit_goal_title", "Edit goal")}</h3>
       <label>${this._t("goals.title_label", "Title")}<input type="text" class="f-title" value="${this._escAttr(goal.title)}"></label>
       <label>${this._t("goals.for_label", "For")}<select class="f-assigned">${userOptions}</select></label>
-      <label>${this._t("goals.target_count_label", "Target count (how many times to log before it\'s done)")}<input type="number" class="f-target" min="1" value="${goal.target_count || 1}"></label>
+      <label>${this._t("goals.target_count_label", "Target count (how many times to log before it\'s done)")}<input type="number" class="f-target" min="1" value="${__fhEsc(goal.target_count || 1)}"></label>
       ${this._rewardFieldsHtml(goal)}
       <label>${this._t("goals.due_date_label", "Due date (optional)")}<input type="datetime-local" class="f-due" value="${this._isoToLocalDatetimeInputValue(goal.due_date)}"></label>
       <label>${this._t("goals.notes_label", "Notes")}<textarea class="f-notes" rows="3">${this._esc(goal.notes || "")}</textarea></label>
@@ -1638,7 +1638,7 @@ class FamilyHubGoalsCard extends HTMLElement {
   _rewardSummary(goal) {
     if (goal.reward_type === GOAL_REWARD_TYPE_CATALOG_ITEM) {
       const item = this._catalogItem(goal.reward_item_id);
-      return item ? `${item.icon || "&#127873;"} ${this._esc(item.title)}` : this._t("goals.reward_unavailable", "(reward no longer available)");
+      return item ? `${item.icon ? __fhEsc(item.icon) : "&#127873;"} ${this._esc(item.title)}` : this._t("goals.reward_unavailable", "(reward no longer available)");
     }
     const stars = goal.star_value || 0;
     const starsText = stars === 1
@@ -1679,20 +1679,20 @@ class FamilyHubGoalsCard extends HTMLElement {
       statusBadge += `<span class="goal-badge rejected">${badgeText}</span>`;
     }
     let actions = "";
-    if (canLog) actions += `<button class="goal-log-btn" data-id="${goal.id}">${target > 1 ? this._t("goals.log_progress", "Log progress") : this._t("goals.mark_done", "Mark done")}</button>`;
+    if (canLog) actions += `<button class="goal-log-btn" data-id="${__fhEsc(goal.id)}">${target > 1 ? this._t("goals.log_progress", "Log progress") : this._t("goals.mark_done", "Mark done")}</button>`;
     if (goal.status === GOAL_STATUS_PENDING_VERIFICATION && canVerify) {
-      actions += `<button class="goal-approve-btn" data-id="${goal.id}">${this._t("goals.approve", "Approve")}</button>`;
-      actions += `<button class="goal-reject-btn" data-id="${goal.id}">${this._t("goals.send_back", "Send back")}</button>`;
+      actions += `<button class="goal-approve-btn" data-id="${__fhEsc(goal.id)}">${this._t("goals.approve", "Approve")}</button>`;
+      actions += `<button class="goal-reject-btn" data-id="${__fhEsc(goal.id)}">${this._t("goals.send_back", "Send back")}</button>`;
     }
-    if (canArchive) actions += `<button class="goal-complete-btn" data-id="${goal.id}">${this._t("goals.complete", "Complete")}</button>`;
+    if (canArchive) actions += `<button class="goal-complete-btn" data-id="${__fhEsc(goal.id)}">${this._t("goals.complete", "Complete")}</button>`;
     if (goal.status === GOAL_STATUS_OPEN && canManage) {
-      actions += `<button class="goal-edit-btn" data-id="${goal.id}">${this._t("common.edit", "Edit")}</button>`;
+      actions += `<button class="goal-edit-btn" data-id="${__fhEsc(goal.id)}">${this._t("common.edit", "Edit")}</button>`;
     }
-    if (canManage) actions += `<button class="goal-delete-btn" data-id="${goal.id}">&times;</button>`;
+    if (canManage) actions += `<button class="goal-delete-btn" data-id="${__fhEsc(goal.id)}">&times;</button>`;
     const dueHtml = goal.due_date ? `<div class="goal-due">${this._t("goals.due_x", "Due %date%", { date: this._fmtDateTime(new Date(goal.due_date)) })}</div>` : "";
     const notesHtml = goal.notes ? `<div class="goal-notes">${this._esc(goal.notes)}</div>` : "";
     return `
-      <div class="goal-card status-${goal.status}" data-id="${goal.id}">
+      <div class="goal-card status-${__fhEsc(goal.status)}" data-id="${__fhEsc(goal.id)}">
         <div class="goal-title">${this._esc(goal.title)}</div>
         <div class="goal-progress">${progressLabel}</div>
         <div class="goal-reward">${this._rewardSummary(goal)}</div>

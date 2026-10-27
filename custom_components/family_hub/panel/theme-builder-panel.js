@@ -17,7 +17,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -645,7 +645,7 @@ class ThemeBuilderPanel extends HTMLElement {
       .map(
         (t, i) => `
         <button class="tb-tab ${i === this._activeIndex ? "active" : ""}" data-idx="${i}">
-          <span class="tb-tab-swatch" style="background:${t.colors.accent}"></span>
+          <span class="tb-tab-swatch" style="background:${__fhEsc(t.colors.accent)}"></span>
           <span class="tb-tab-name">${this._escape(t.name || "Untitled")}</span>
         </button>
       `
@@ -721,9 +721,9 @@ class ThemeBuilderPanel extends HTMLElement {
           ${colorFields
             .map(
               ([key, label]) => `
-            <label class="tb-color-row" data-key="${key}">
-              <span>${label}</span>
-              <input type="color" class="tb-color-input" data-key="${key}" value="${theme.colors[key] || "#000000"}" />
+            <label class="tb-color-row" data-key="${__fhEsc(key)}">
+              <span>${__fhEsc(label)}</span>
+              <input type="color" class="tb-color-input" data-key="${__fhEsc(key)}" value="${__fhEsc(theme.colors[key] || "#000000")}" />
             </label>
           `
             )
@@ -736,9 +736,9 @@ class ThemeBuilderPanel extends HTMLElement {
           ${fontFields
             .map(
               ([key, label]) => `
-            <label class="tb-font-row" data-key="${key}">
-              <span>${label}</span>
-              <input type="number" class="tb-font-input" data-key="${key}" min="6" max="72" value="${theme.fonts[key]}" />
+            <label class="tb-font-row" data-key="${__fhEsc(key)}">
+              <span>${__fhEsc(label)}</span>
+              <input type="number" class="tb-font-input" data-key="${__fhEsc(key)}" min="6" max="72" value="${__fhEsc(theme.fonts[key])}" />
             </label>
           `
             )
@@ -749,19 +749,19 @@ class ThemeBuilderPanel extends HTMLElement {
         <h2 data-fh-t="text.appearance">${__fhT("text.appearance", "Appearance", null, "h")}</h2>
         <label class="tb-appearance-row">
           <span data-fh-t="text.border_weight_px">${__fhT("text.border_weight_px", "Border weight (px)", null, "h")}</span>
-          <input type="number" class="tb-border-width" min="0" max="8" value="${theme.borderWidth}" />
+          <input type="number" class="tb-border-width" min="0" max="8" value="${__fhEsc(theme.borderWidth)}" />
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.accent_border_weight_px">${__fhT("text.accent_border_weight_px", "Accent border weight (px)", null, "h")}</span>
-          <input type="number" class="tb-accent-border-width" min="0" max="8" value="${theme.accentBorderWidth}" />
+          <input type="number" class="tb-accent-border-width" min="0" max="8" value="${__fhEsc(theme.accentBorderWidth)}" />
         </label>
         <label class="tb-appearance-row">
-          <span>${__fhT("text.card_chip_transparency", "Card / chip transparency (", null, "h")}<span class="tb-opacity-val">${theme.cardOpacity}</span>%)</span>
-          <input type="range" class="tb-opacity" min="20" max="100" value="${theme.cardOpacity}" />
+          <span>${__fhT("text.card_chip_transparency", "Card / chip transparency (", null, "h")}<span class="tb-opacity-val">${__fhEsc(theme.cardOpacity)}</span>%)</span>
+          <input type="range" class="tb-opacity" min="20" max="100" value="${__fhEsc(theme.cardOpacity)}" />
         </label>
         <label class="tb-appearance-row">
-          <span>${__fhT("text.glass_blur", "Glass blur (", null, "h")}<span class="tb-glass-blur-val">${theme.glassBlur}</span>${__fhT("text.px_pairs_with_transparency_above_for_a", "px) - pairs with transparency above for a \"liquid glass\" look", null, "h")}</span>
-          <input type="range" class="tb-glass-blur" min="0" max="24" value="${theme.glassBlur}" />
+          <span>${__fhT("text.glass_blur", "Glass blur (", null, "h")}<span class="tb-glass-blur-val">${__fhEsc(theme.glassBlur)}</span>${__fhT("text.px_pairs_with_transparency_above_for_a", "px) - pairs with transparency above for a \"liquid glass\" look", null, "h")}</span>
+          <input type="range" class="tb-glass-blur" min="0" max="24" value="${__fhEsc(theme.glassBlur)}" />
         </label>
       </div>
       <div class="tb-section">
@@ -772,7 +772,7 @@ class ThemeBuilderPanel extends HTMLElement {
         </label>
         <label class="tb-color-row" style="max-width:460px;">
           <span data-fh-t="text.shadow_color">${__fhT("text.shadow_color", "Shadow color", null, "h")}</span>
-          <input type="color" class="tb-shadow-color" value="${shadow.color}" />
+          <input type="color" class="tb-shadow-color" value="${__fhEsc(shadow.color)}" />
         </label>
         <label class="tb-appearance-row">
           <span>${__fhT("text.opacity", "Opacity (", null, "h")}<span class="tb-shadow-opacity-val">${Math.round(shadow.opacity * 100)}</span>%)</span>
@@ -780,19 +780,19 @@ class ThemeBuilderPanel extends HTMLElement {
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.blur_px">${__fhT("text.blur_px", "Blur (px)", null, "h")}</span>
-          <input type="number" class="tb-shadow-blur" min="0" max="60" value="${shadow.blurRadius}" />
+          <input type="number" class="tb-shadow-blur" min="0" max="60" value="${__fhEsc(shadow.blurRadius)}" />
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.spread_px">${__fhT("text.spread_px", "Spread (px)", null, "h")}</span>
-          <input type="number" class="tb-shadow-spread" min="-20" max="40" value="${shadow.spreadRadius}" />
+          <input type="number" class="tb-shadow-spread" min="-20" max="40" value="${__fhEsc(shadow.spreadRadius)}" />
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.offset_x_px">${__fhT("text.offset_x_px", "Offset X (px)", null, "h")}</span>
-          <input type="number" class="tb-shadow-offset-x" min="-40" max="40" value="${shadow.offsetX}" />
+          <input type="number" class="tb-shadow-offset-x" min="-40" max="40" value="${__fhEsc(shadow.offsetX)}" />
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.offset_y_px">${__fhT("text.offset_y_px", "Offset Y (px)", null, "h")}</span>
-          <input type="number" class="tb-shadow-offset-y" min="-40" max="40" value="${shadow.offsetY}" />
+          <input type="number" class="tb-shadow-offset-y" min="-40" max="40" value="${__fhEsc(shadow.offsetY)}" />
         </label>
       </div>
       <div class="tb-section">
@@ -803,7 +803,7 @@ class ThemeBuilderPanel extends HTMLElement {
         </label>
         <label class="tb-color-row" style="max-width:460px;">
           <span data-fh-t="text.glow_color">${__fhT("text.glow_color", "Glow color", null, "h")}</span>
-          <input type="color" class="tb-glow-color" value="${glow.color}" />
+          <input type="color" class="tb-glow-color" value="${__fhEsc(glow.color)}" />
         </label>
         <label class="tb-appearance-row">
           <span>${__fhT("text.opacity", "Opacity (", null, "h")}<span class="tb-glow-opacity-val">${Math.round(glow.opacity * 100)}</span>%)</span>
@@ -811,7 +811,7 @@ class ThemeBuilderPanel extends HTMLElement {
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.blur_px">${__fhT("text.blur_px", "Blur (px)", null, "h")}</span>
-          <input type="number" class="tb-glow-blur" min="0" max="60" value="${glow.blurRadius}" />
+          <input type="number" class="tb-glow-blur" min="0" max="60" value="${__fhEsc(glow.blurRadius)}" />
         </label>
       </div>
       <div class="tb-section">
@@ -841,11 +841,11 @@ class ThemeBuilderPanel extends HTMLElement {
         </label>
         <label class="tb-appearance-row">
           <span data-fh-t="text.blur_px">${__fhT("text.blur_px", "Blur (px)", null, "h")}</span>
-          <input type="number" class="tb-bg-blur" min="0" max="30" value="${bg.blur}" />
+          <input type="number" class="tb-bg-blur" min="0" max="30" value="${__fhEsc(bg.blur)}" />
         </label>
         <label class="tb-color-row" style="max-width:460px;">
           <span data-fh-t="text.overlay_tint">${__fhT("text.overlay_tint", "Overlay tint", null, "h")}</span>
-          <input type="color" class="tb-bg-overlay-color" value="${bg.overlayColor}" />
+          <input type="color" class="tb-bg-overlay-color" value="${__fhEsc(bg.overlayColor)}" />
         </label>
         <label class="tb-appearance-row">
           <span>${__fhT("text.overlay_strength", "Overlay strength (", null, "h")}<span class="tb-bg-overlay-val">${Math.round(bg.overlayOpacity * 100)}</span>%)</span>

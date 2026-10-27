@@ -13,7 +13,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -3195,7 +3195,7 @@ class FamilyHubChoresCard extends HTMLElement {
     }
     el.hidden = false;
     const active = this._activePersonFilter(pills.map((p) => p.id));
-    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     el.innerHTML = pills
       .map((p) => {
         const isActive = active.includes(p.id);
@@ -3329,10 +3329,10 @@ class FamilyHubChoresCard extends HTMLElement {
   }
   _waitingToRecurCardHtml(chore) {
     return `
-      <div class="chore-card status-approved waiting-recur-card" data-id="${chore.id}">
+      <div class="chore-card status-approved waiting-recur-card" data-id="${__fhEsc(chore.id)}">
         <div class="chore-title">${this._esc(chore.title)}</div>
         <div class="chore-meta">
-          <span class="chore-stars">&#11088; ${chore.star_value || 0}</span>
+          <span class="chore-stars">&#11088; ${__fhEsc(chore.star_value || 0)}</span>
         </div>
         <div class="waiting-recur-desc">${this._recurDescriptionHtml(chore)}</div>
         <div class="waiting-recur-owner">${this._t("chores.last_done_by_x", `Last done by ${this._esc(this._userName(chore.assigned_to))}`, { x: this._esc(this._userName(chore.assigned_to)) })}</div>
@@ -3410,11 +3410,11 @@ class FamilyHubChoresCard extends HTMLElement {
     const myBalance = this._balances[this._myUserId()] || 0;
     const affordable = myBalance >= (item.cost_stars || 0);
     return `
-      <div class="rewards-catalog-item" data-id="${item.id}"${this._rewardsCatalogAccentStyle(item)}>
-        <span class="rewards-catalog-icon">${item.icon || "&#127873;"}</span>
+      <div class="rewards-catalog-item" data-id="${__fhEsc(item.id)}"${this._rewardsCatalogAccentStyle(item)}>
+        <span class="rewards-catalog-icon">${(item.icon ? __fhEsc(item.icon) : "&#127873;")}</span>
         <span class="rewards-catalog-item-title">${this._esc(item.title)}</span>
-        <span class="rewards-catalog-cost">&#11088; ${item.cost_stars}</span>
-        <button type="button" class="rewards-claim-btn" data-id="${item.id}" ${affordable ? "" : "disabled"}>${this._t("chores.claim", "Claim")}</button>
+        <span class="rewards-catalog-cost">&#11088; ${__fhEsc(item.cost_stars)}</span>
+        <button type="button" class="rewards-claim-btn" data-id="${__fhEsc(item.id)}" ${affordable ? "" : "disabled"}>${this._t("chores.claim", "Claim")}</button>
         <div class="rewards-claim-status"></div>
       </div>
     `;
@@ -3564,7 +3564,7 @@ class FamilyHubChoresCard extends HTMLElement {
     // once it's actually pending (checked, star_value set, and
     // no_approval_required is false) - see toggle_item's own docstring.
     const starsBadge = item.star_value
-      ? `<span class="routine-item-stars">&#11088; ${item.star_value}${item.pending_approval ? ` - ${this._t("chores.awaiting_approval", "awaiting approval")}` : ""}</span>`
+      ? `<span class="routine-item-stars">&#11088; ${__fhEsc(item.star_value)}${item.pending_approval ? ` - ${this._t("chores.awaiting_approval", "awaiting approval")}` : ""}</span>`
       : "";
     const meta = dueBadge || daysBadge || starsBadge ? `<div class="routine-item-meta">${dueBadge}${daysBadge}${starsBadge}</div>` : "";
     // Editing/removing an item is an admin/assign-permission action
@@ -3581,18 +3581,18 @@ class FamilyHubChoresCard extends HTMLElement {
     // specifically (PERMISSION_VERIFY or a real admin) - the same tier that
     // approves chore completions.
     const approveBtn = item.pending_approval && this._canVerify()
-      ? `<button type="button" class="routine-item-approve" data-id="${item.id}" title="${this._t("chores.approve_stars_title", "Approve stars")}">${this._t("chores.approve", "Approve")}</button>`
+      ? `<button type="button" class="routine-item-approve" data-id="${__fhEsc(item.id)}" title="${this._t("chores.approve_stars_title", "Approve stars")}">${this._t("chores.approve", "Approve")}</button>`
       : "";
     const actions = this._canManageRoutinesFor(item.user_id)
       ? `
         ${approveBtn}
-        <button type="button" class="routine-item-edit" data-id="${item.id}" title="${this._t("common.edit", "Edit")}">&#9998;</button>
-        <button type="button" class="routine-item-delete" data-id="${item.id}" title="${this._t("chores.remove", "Remove")}">&times;</button>
+        <button type="button" class="routine-item-edit" data-id="${__fhEsc(item.id)}" title="${this._t("common.edit", "Edit")}">&#9998;</button>
+        <button type="button" class="routine-item-delete" data-id="${__fhEsc(item.id)}" title="${this._t("chores.remove", "Remove")}">&times;</button>
       `
       : approveBtn;
     return `
-      <div class="routine-item-card ${item.done ? "done" : ""}" data-id="${item.id}">
-        <input type="checkbox" class="routine-item-check" data-id="${item.id}" ${item.done ? "checked" : ""}>
+      <div class="routine-item-card ${item.done ? "done" : ""}" data-id="${__fhEsc(item.id)}">
+        <input type="checkbox" class="routine-item-check" data-id="${__fhEsc(item.id)}" ${item.done ? "checked" : ""}>
         <div class="routine-item-body">
           <div class="routine-item-title">${this._esc(item.title)}</div>
           ${meta}
@@ -3668,11 +3668,11 @@ class FamilyHubChoresCard extends HTMLElement {
     const canLog = goal.status === GOAL_STATUS_OPEN && this._canLogGoalProgress(goal);
     const progressLabel = target > 1 ? `${current} / ${target}` : (current >= target ? this._t("chores.done", "Done") : this._t("chores.not_yet_done", "Not yet done"));
     let actions = "";
-    if (canLog) actions += `<button type="button" class="goal-log-btn" data-id="${goal.id}">${target > 1 ? this._t("chores.log", "Log") : this._t("chores.mark_done", "Mark done")}</button>`;
+    if (canLog) actions += `<button type="button" class="goal-log-btn" data-id="${__fhEsc(goal.id)}">${target > 1 ? this._t("chores.log", "Log") : this._t("chores.mark_done", "Mark done")}</button>`;
     if (goal.status === GOAL_STATUS_PENDING_VERIFICATION) {
       if (this._canVerify()) {
-        actions += `<button type="button" class="goal-approve-btn" data-id="${goal.id}">${this._t("chores.approve", "Approve")}</button>`;
-        actions += `<button type="button" class="goal-reject-btn" data-id="${goal.id}">${this._t("chores.send_back", "Send back")}</button>`;
+        actions += `<button type="button" class="goal-approve-btn" data-id="${__fhEsc(goal.id)}">${this._t("chores.approve", "Approve")}</button>`;
+        actions += `<button type="button" class="goal-reject-btn" data-id="${__fhEsc(goal.id)}">${this._t("chores.send_back", "Send back")}</button>`;
       } else actions += `<span class="goal-pending-label">${this._t("chores.awaiting_approval", "Awaiting approval")}</span>`;
     } else if (goal.status === GOAL_STATUS_APPROVED) {
       actions += `<span class="goal-approved-label">&#10003; ${this._t("chores.achieved", "Achieved")}</span>`;
@@ -3682,11 +3682,11 @@ class FamilyHubChoresCard extends HTMLElement {
       // there: the assignee themselves, or whoever can otherwise manage
       // goals (can_assign/admin, via _canAssign()).
       if (goal.assigned_to === this._myUserId() || this._canAssign()) {
-        actions += `<button type="button" class="goal-complete-btn" data-id="${goal.id}">${this._t("chores.complete", "Complete")}</button>`;
+        actions += `<button type="button" class="goal-complete-btn" data-id="${__fhEsc(goal.id)}">${this._t("chores.complete", "Complete")}</button>`;
       }
     }
     return `
-      <div class="goal-item status-${goal.status}" data-id="${goal.id}">
+      <div class="goal-item status-${__fhEsc(goal.status)}" data-id="${__fhEsc(goal.id)}">
         <span class="goal-item-icon">&#127942;</span>
         <div class="goal-item-body">
           <div class="goal-item-title">${this._esc(goal.title)}</div>
@@ -3830,12 +3830,12 @@ class FamilyHubChoresCard extends HTMLElement {
     if (status === "open" && !isBin) {
       const doneLabel = hasQuantity ? this._t("chores.done_n_left", `Done (${qtyRemaining} left)`, { n: String(qtyRemaining) }) : this._t("chores.done", "Done");
       if (runningTimer) {
-        actions += `<span class="chore-timer-live" title="${this._t("chores.time_left_title", "Time left - finishes by itself")}">&#9201; <span data-timer-uid="${runningTimer.uid}">${this._formatTimerRemaining(this._timerRemainingSeconds(runningTimer))}</span></span>`;
-        actions += `<button class="chore-timer-cancel-btn" data-uid="${runningTimer.uid}" title="${this._t("chores.stop_timer_title", "Stop the timer")}">&#10005;</button>`;
+        actions += `<span class="chore-timer-live" title="${this._t("chores.time_left_title", "Time left - finishes by itself")}">&#9201; <span data-timer-uid="${__fhEsc(runningTimer.uid)}">${this._formatTimerRemaining(this._timerRemainingSeconds(runningTimer))}</span></span>`;
+        actions += `<button class="chore-timer-cancel-btn" data-uid="${__fhEsc(runningTimer.uid)}" title="${this._t("chores.stop_timer_title", "Stop the timer")}">&#10005;</button>`;
       } else if (timerMinutes > 0) {
-        actions += `<button class="chore-timer-start-btn" data-id="${chore.id}" title="${this._t("chores.start_timer_title", "Start the timer - this chore finishes itself when it runs out")}">&#9654; ${this._t("chores.start_n", `Start (${this._formatTimerLength(timerMinutes)})`, { n: this._formatTimerLength(timerMinutes) })}</button>`;
+        actions += `<button class="chore-timer-start-btn" data-id="${__fhEsc(chore.id)}" title="${this._t("chores.start_timer_title", "Start the timer - this chore finishes itself when it runs out")}">&#9654; ${this._t("chores.start_n", `Start (${this._formatTimerLength(timerMinutes)})`, { n: this._formatTimerLength(timerMinutes) })}</button>`;
       }
-      actions += `<button class="chore-done-btn" data-id="${chore.id}">${doneLabel}</button>`;
+      actions += `<button class="chore-done-btn" data-id="${__fhEsc(chore.id)}">${doneLabel}</button>`;
       // Household ask, verbatim: "Chores should have a button to Mark in
       // progress also." A lightweight, reversible flag (see
       // chore_engine.set_chore_in_progress's own docstring) - not a new
@@ -3845,10 +3845,10 @@ class FamilyHubChoresCard extends HTMLElement {
       // indicators competing for the same spot.
       if (!runningTimer) {
         actions += chore.in_progress
-          ? `<button class="chore-in-progress-btn is-active" data-id="${chore.id}" data-next="0" title="${this._t("chores.in_progress_title", "Someone's working on this - tap to clear")}">&#9203; ${this._t("chores.in_progress", "In progress")}</button>`
-          : `<button class="chore-in-progress-btn" data-id="${chore.id}" data-next="1" title="${this._t("chores.mark_in_progress_title", "Let the household know you're working on this")}">${this._t("chores.mark_in_progress", "Mark in progress")}</button>`;
+          ? `<button class="chore-in-progress-btn is-active" data-id="${__fhEsc(chore.id)}" data-next="0" title="${this._t("chores.in_progress_title", "Someone's working on this - tap to clear")}">&#9203; ${this._t("chores.in_progress", "In progress")}</button>`
+          : `<button class="chore-in-progress-btn" data-id="${__fhEsc(chore.id)}" data-next="1" title="${this._t("chores.mark_in_progress_title", "Let the household know you're working on this")}">${this._t("chores.mark_in_progress", "Mark in progress")}</button>`;
       }
-      actions += `<button class="chore-nudge-btn" data-id="${chore.id}" title="${this._t("chores.nudge", "Nudge")}">&#128276;</button>`;
+      actions += `<button class="chore-nudge-btn" data-id="${__fhEsc(chore.id)}" title="${this._t("chores.nudge", "Nudge")}">&#128276;</button>`;
     } else if (status === "open" && isBin) {
       // used to be gated to assignment_mode === "first_come_first_
       // served" only, leaving a plain Chore Bin chore admin-drag-only with
@@ -3856,11 +3856,11 @@ class FamilyHubChoresCard extends HTMLElement {
       // comment. Chore Bin now means "anyone can claim" itself, so any
       // chore actually sitting unassigned in the bin gets the Claim button,
       // whichever of the (now-merged) modes it was created under.
-      actions += `<button class="chore-claim-btn" data-id="${chore.id}">${this._t("chores.claim", "Claim")}</button>`;
+      actions += `<button class="chore-claim-btn" data-id="${__fhEsc(chore.id)}">${this._t("chores.claim", "Claim")}</button>`;
     } else if (status === "pending_verification") {
       if (this._canVerify()) {
-        actions += `<button class="chore-approve-btn" data-id="${chore.id}">${this._t("chores.approve", "Approve")}</button>`;
-        actions += `<button class="chore-reject-btn" data-id="${chore.id}" title="${this._t("chores.send_back_title", "Send back - not approved")}">${this._t("chores.reject", "Reject")}</button>`;
+        actions += `<button class="chore-approve-btn" data-id="${__fhEsc(chore.id)}">${this._t("chores.approve", "Approve")}</button>`;
+        actions += `<button class="chore-reject-btn" data-id="${__fhEsc(chore.id)}" title="${this._t("chores.send_back_title", "Send back - not approved")}">${this._t("chores.reject", "Reject")}</button>`;
       } else actions += `<span class="chore-pending-label">${this._t("chores.awaiting_approval", "Awaiting approval")}</span>`;
     } else if (status === "approved") {
       actions += `<span class="chore-approved-label">&#10003; ${this._t("chores.done", "Done")}</span>`;
@@ -3876,13 +3876,13 @@ class FamilyHubChoresCard extends HTMLElement {
     // a UI convenience matching an existing backend rule, not a new
     // permission of its own.
     if (status === "open" && this._canEditChore()) {
-      actions += `<button class="chore-edit-btn" data-id="${chore.id}" title="${this._t("common.edit", "Edit")}">&#9998;</button>`;
+      actions += `<button class="chore-edit-btn" data-id="${__fhEsc(chore.id)}" title="${this._t("common.edit", "Edit")}">&#9998;</button>`;
     }
     const dueStr = this._formatChoreDueDisplay(chore.due_date);
     const due = dueStr ? `<span class="chore-due">${this._t("chores.due_x", `Due ${dueStr}`, { x: dueStr })}</span>` : "";
-    const streak = chore.streak_count > 0 ? `<span class="chore-streak">&#128293; ${chore.streak_count}</span>` : "";
+    const streak = chore.streak_count > 0 ? `<span class="chore-streak">&#128293; ${__fhEsc(chore.streak_count)}</span>` : "";
     const quantityBadge =
-      hasQuantity && status === "open" ? `<span class="chore-quantity">${qtyRemaining}/${chore.quantity_total}</span>` : "";
+      hasQuantity && status === "open" ? `<span class="chore-quantity">${qtyRemaining}/${__fhEsc(chore.quantity_total)}</span>` : "";
     // a small "sent back" flag while this chore sits open again
     // after chore_engine.reject_chore - rejected_by/rejected_at/reject_reason
     // are only ever set by a reject (see const.py's CHORE_KEY_REJECT_REASON
@@ -3894,10 +3894,10 @@ class FamilyHubChoresCard extends HTMLElement {
     // _sortChoresForColumn; this is just the visual marker.
     const importantBadge = chore.important ? `<span class="chore-important-badge" title="${this._t("chores.important", "Important")}">&#10071;</span>` : "";
     return `
-      <div class="chore-card status-${status}${chore.important ? " chore-important" : ""}" draggable="${this._canAssign() && status === "open" ? "true" : "false"}" data-id="${chore.id}">
+      <div class="chore-card status-${status}${chore.important ? " chore-important" : ""}" draggable="${this._canAssign() && status === "open" ? "true" : "false"}" data-id="${__fhEsc(chore.id)}">
         <div class="chore-title">${importantBadge}${this._esc(chore.title)}</div>
         <div class="chore-meta">
-          <span class="chore-stars">&#11088; ${chore.star_value || 0}</span>
+          <span class="chore-stars">&#11088; ${__fhEsc(chore.star_value || 0)}</span>
           ${due}
           ${streak}
           ${quantityBadge}
@@ -3958,11 +3958,11 @@ class FamilyHubChoresCard extends HTMLElement {
         <span>${this._esc(assigneeName)}</span>
       </div>
       <div class="detail-stats">
-        <span class="detail-stat">&#11088; ${chore.star_value || 0} star${chore.star_value === 1 ? "" : "s"}</span>
+        <span class="detail-stat">&#11088; ${__fhEsc(chore.star_value || 0)} star${chore.star_value === 1 ? "" : "s"}</span>
         ${due ? `<span class="detail-stat">${__fhT("text.due_x", "📅 Due %0%", {0: this._esc(due)}, "h")}</span>` : ""}
-        ${chore.overdue_penalty ? `<span class="detail-stat">${__fhT("text.x_if_overdue", "⚠ -%0% if overdue", {0: chore.overdue_penalty}, "h")}</span>` : ""}
-        ${chore.streak_count > 0 ? `<span class="detail-stat">&#128293; ${chore.streak_count} streak</span>` : ""}
-        ${chore.quantity_total ? `<span class="detail-stat">&#128203; ${chore.quantity_remaining == null ? chore.quantity_total : chore.quantity_remaining}/${chore.quantity_total} left</span>` : ""}
+        ${chore.overdue_penalty ? `<span class="detail-stat">${__fhT("text.x_if_overdue", "⚠ -%0% if overdue", {0: __fhEsc(chore.overdue_penalty)}, "h")}</span>` : ""}
+        ${chore.streak_count > 0 ? `<span class="detail-stat">&#128293; ${__fhEsc(chore.streak_count)} streak</span>` : ""}
+        ${chore.quantity_total ? `<span class="detail-stat">&#128203; ${chore.quantity_remaining == null ? __fhEsc(chore.quantity_total) : __fhEsc(chore.quantity_remaining)}/${__fhEsc(chore.quantity_total)} left</span>` : ""}
       </div>
       ${recurHtml ? `<div class="detail-recur">${__fhT("text.recurs_x", "🔄 Recurs: %0%", {0: recurHtml}, "h")}</div>` : ""}
       ${deps.length ? `<div data-fh-t="text.waiting_on" class="detail-section-label">${__fhT("text.waiting_on", "Waiting on", null, "h")}</div><div class="detail-deps">${deps.join("")}</div>` : ""}
@@ -4020,9 +4020,9 @@ class FamilyHubChoresCard extends HTMLElement {
   }
 
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   // _esc() alone is only safe inside HTML text content - it never escapes
   // `"`, which text-node serialization has no reason to touch but a
@@ -4131,16 +4131,16 @@ class FamilyHubChoresCard extends HTMLElement {
         const goalsHtml = col.id !== CHORE_BIN_SENTINEL ? this._goalsBlockHtml(col.id) : "";
         const choresLabel = routinesHtml || goalsHtml ? `<div class="chores-section-label">${this._t("chores.chores_label", "Chores")}</div>` : "";
         return `
-          <div class="chore-column" data-col-id="${col.id}">
-            <div class="chore-col-header" style="border-color:${col.color}">
-              <span class="chore-col-dot" style="background:${col.color}"></span>
+          <div class="chore-column" data-col-id="${__fhEsc(col.id)}">
+            <div class="chore-col-header" style="border-color:${__fhEsc(col.color)}">
+              <span class="chore-col-dot" style="background:${__fhEsc(col.color)}"></span>
               <span>${this._esc(col.name)}</span>
               <span class="chore-col-count">${activeItems.length}</span>
             </div>
             ${routinesHtml}
             ${goalsHtml}
             ${choresLabel}
-            <div class="chore-col-body" data-col-id="${col.id}">
+            <div class="chore-col-body" data-col-id="${__fhEsc(col.id)}">
               ${activeItems.length ? activeItems.map((c) => this._choreCardHtml(c)).join("") : `<div class="chore-col-empty">${this._t("chores.nothing_here", "Nothing here")}</div>`}
             </div>
             ${this._completedChoresAccordionHtml(col.id, completedItems)}
@@ -4248,11 +4248,11 @@ class FamilyHubChoresCard extends HTMLElement {
     const interval = chore && chore.recur_interval_days ? chore.recur_interval_days : 1;
     const selectedDays = new Set((chore && chore.recur_weekdays) || []);
     const weekdayBtns = WEEKDAY_LABELS.map(
-      (label, idx) => `<button type="button" class="weekday-btn ${selectedDays.has(idx) ? "active" : ""}" data-day="${idx}">${label}</button>`
+      (label, idx) => `<button type="button" class="weekday-btn ${selectedDays.has(idx) ? "active" : ""}" data-day="${idx}">${__fhEsc(label)}</button>`
     ).join("");
     const monthlySelectedDays = recurType === "monthly_nth" ? selectedDays : new Set();
     const monthlyWeekdayBtns = WEEKDAY_LABELS.map(
-      (label, idx) => `<button type="button" class="weekday-btn f-recur-monthly-weekday ${monthlySelectedDays.has(idx) ? "active" : ""}" data-day="${idx}">${label}</button>`
+      (label, idx) => `<button type="button" class="weekday-btn f-recur-monthly-weekday ${monthlySelectedDays.has(idx) ? "active" : ""}" data-day="${idx}">${__fhEsc(label)}</button>`
     ).join("");
     const nth = chore && chore.recur_month_nth;
     const nthOptions = [
@@ -4261,10 +4261,10 @@ class FamilyHubChoresCard extends HTMLElement {
       { value: "3", label: "The 3rd" },
       { value: "4", label: "The 4th" },
       { value: "-1", label: "The last" },
-    ].map((o) => `<option value="${o.value}" ${String(nth) === o.value ? "selected" : ""}>${o.label}</option>`).join("");
+    ].map((o) => `<option value="${__fhEsc(o.value)}" ${String(nth) === o.value ? "selected" : ""}>${__fhEsc(o.label)}</option>`).join("");
     const dueOffset = chore && chore.recur_due_offset_minutes ? chore.recur_due_offset_minutes : 0;
     const dueOffsetOptions = RECUR_DUE_OFFSET_OPTIONS.map(
-      (o) => `<option value="${o.value}" ${dueOffset === o.value ? "selected" : ""}>${o.label}</option>`
+      (o) => `<option value="${__fhEsc(o.value)}" ${dueOffset === o.value ? "selected" : ""}>${__fhEsc(o.label)}</option>`
     ).join("");
     // A unit select alongside
     // the existing count input - "days" (the pre-existing/default
@@ -4275,7 +4275,7 @@ class FamilyHubChoresCard extends HTMLElement {
       { value: "days", label: "day(s)" },
       { value: "weeks", label: "week(s)" },
       { value: "months", label: "month(s)" },
-    ].map((o) => `<option value="${o.value}" ${intervalUnit === o.value ? "selected" : ""}>${o.label}</option>`).join("");
+    ].map((o) => `<option value="${__fhEsc(o.value)}" ${intervalUnit === o.value ? "selected" : ""}>${__fhEsc(o.label)}</option>`).join("");
     // Anchor date for the preset dropdown's own dynamic labels ("Weekly on
     // Tuesday") - the chore's own due date when editing one that has one,
     // otherwise today (matches a brand-new chore with no due date picked
@@ -4293,10 +4293,10 @@ class FamilyHubChoresCard extends HTMLElement {
       { value: "monthly_nth", label: `Monthly on the ${nthWord} ${weekdayFull}` },
       { value: "weekdays_mf", label: "Every weekday (Monday to Friday)" },
       { value: "custom", label: "Custom..." },
-    ].map((o) => `<option value="${o.value}" ${presetValue === o.value ? "selected" : ""}>${o.label}</option>`).join("");
+    ].map((o) => `<option value="${__fhEsc(o.value)}" ${presetValue === o.value ? "selected" : ""}>${__fhEsc(o.label)}</option>`).join("");
     return `
       <label>${__fhT("text.recurs", "Recurs", null, "h")}
-        <select class="f-recur-preset" data-anchor-weekday="${anchorInfo.weekday}" data-anchor-nth="${anchorInfo.nth}">${presetOptions}</select>
+        <select class="f-recur-preset" data-anchor-weekday="${__fhEsc(anchorInfo.weekday)}" data-anchor-nth="${__fhEsc(anchorInfo.nth)}">${presetOptions}</select>
       </label>
       <div class="field f-recur-custom-panel">
         <label>${__fhT("text.custom_recurrence", "Custom recurrence", null, "h")}
@@ -4470,8 +4470,8 @@ class FamilyHubChoresCard extends HTMLElement {
     const current = (chore && chore.reminder_minutes) || [];
     const optionsHtml = CHORE_REMINDER_MINUTES_CHOICES
       .map((m) => {
-        const label = m >= 60 ? (m % 1440 === 0 ? `${m / 1440}d` : `${m / 60}h`) : `${m}m`;
-        return `<label class="f-remind-opt"><input type="checkbox" class="f-remind-check" value="${m}"${current.includes(m) ? " checked" : ""} />${label}</label>`;
+        const label = m >= 60 ? (m % 1440 === 0 ? `${m / 1440}d` : `${m / 60}h`) : `${__fhEsc(m)}m`;
+        return `<label class="f-remind-opt"><input type="checkbox" class="f-remind-check" value="${__fhEsc(m)}"${current.includes(m) ? " checked" : ""} />${label}</label>`;
       })
       .join("");
     return `
@@ -4512,10 +4512,10 @@ class FamilyHubChoresCard extends HTMLElement {
     const box = overlay.querySelector(".modal-box");
     // Only Family Hub members are offered as a NEW direct assignee or
     // rotation-group member (see _memberUsers/_columns).
-    const userOptions = this._memberUsers().map((u) => `<option value="${u.id}">${this._esc(u.name)}</option>`).join("");
+    const userOptions = this._memberUsers().map((u) => `<option value="${__fhEsc(u.id)}">${this._esc(u.name)}</option>`).join("");
     const depOptions = this._chores
       .filter((c) => c.status !== "approved")
-      .map((c) => `<option value="${c.id}">${this._esc(c.title)}</option>`)
+      .map((c) => `<option value="${__fhEsc(c.id)}">${this._esc(c.title)}</option>`)
       .join("");
     // a third Routine tab, shown only when _routinesEnabled() (the
     // FAB itself is already canAssign()-gated - see _render() - so unlike
@@ -4556,8 +4556,8 @@ class FamilyHubChoresCard extends HTMLElement {
                existing test reads and sets), the buttons just drive it:
                clicking one sets the select's value and dispatches "change"
                on it, so nothing downstream had to change at all. -->
-          <div class="f-mode-btn-group">${ASSIGNMENT_MODES.map((m, i) => `<button type="button" class="f-mode-btn${i === 0 ? " active" : ""}" data-mode="${m.value}" title="${this._escAttr(m.title)}">${this._esc(m.label)}</button>`).join("")}</div>
-          <select class="f-mode" style="display:none">${ASSIGNMENT_MODES.map((m) => `<option value="${m.value}">${m.label}</option>`).join("")}</select>
+          <div class="f-mode-btn-group">${ASSIGNMENT_MODES.map((m, i) => `<button type="button" class="f-mode-btn${i === 0 ? " active" : ""}" data-mode="${__fhEsc(m.value)}" title="${this._escAttr(m.title)}">${this._esc(m.label)}</button>`).join("")}</div>
+          <select class="f-mode" style="display:none">${ASSIGNMENT_MODES.map((m) => `<option value="${__fhEsc(m.value)}">${__fhEsc(m.label)}</option>`).join("")}</select>
         </div>
         <!-- - Chore Bin is now its own
              assignment mode (see just above), so offering it again as an
@@ -4579,7 +4579,7 @@ class FamilyHubChoresCard extends HTMLElement {
              hand would, just in one step. -->
         <label class="f-direct-field remind-check-opt f-multi-assign-toggle"><input type="checkbox" class="f-multi-assign" /> Assign to multiple people</label>
         <div class="field f-multi-assign-field" style="display:none"><label>Assigned to (everyone checked gets their own copy of this chore)</label>
-          <div class="f-assigned-multi-list">${this._memberUsers().map((u) => `<label class="remind-check-opt"><input type="checkbox" class="f-assigned-multi" value="${u.id}" /> ${this._esc(u.name)}</label>`).join("")}</div>
+          <div class="f-assigned-multi-list">${this._memberUsers().map((u) => `<label class="remind-check-opt"><input type="checkbox" class="f-assigned-multi" value="${__fhEsc(u.id)}" /> ${this._esc(u.name)}</label>`).join("")}</div>
         </div>
         <div class="field"><label>Star value</label><input type="number" class="f-stars" min="0" value="0"></div>
         <div class="field"><label>Due date</label><input type="datetime-local" class="f-due"></div>
@@ -4809,7 +4809,7 @@ class FamilyHubChoresCard extends HTMLElement {
             const box2 = this._root.querySelector(".create-modal .modal-box");
             if (box2 && box2.dataset.activeTab === "goal") {
               const field = box2.querySelector(".g-reward-item-field");
-              if (field) field.querySelector("select").innerHTML = this._catalog.map((it) => `<option value="${it.id}">${this._esc(it.title)} (${it.cost_stars}&#11088;)</option>`).join("");
+              if (field) field.querySelector("select").innerHTML = this._catalog.map((it) => `<option value="${__fhEsc(it.id)}">${this._esc(it.title)} (${__fhEsc(it.cost_stars)}&#11088;)</option>`).join("");
             }
           });
         }
@@ -4845,7 +4845,7 @@ class FamilyHubChoresCard extends HTMLElement {
       (byCategory[entry.category] = byCategory[entry.category] || []).push(entry);
     });
     const optgroups = ROUTINE_CATEGORIES.filter((c) => byCategory[c] && byCategory[c].length)
-      .map((c) => `<optgroup label="${this._esc(this._routineCategoryLabel(c))}">${byCategory[c].map((entry) => `<option value="${this._escAttr(entry.title)}">${entry.icon} ${this._esc(entry.title)}</option>`).join("")}</optgroup>`)
+      .map((c) => `<optgroup label="${this._esc(this._routineCategoryLabel(c))}">${byCategory[c].map((entry) => `<option value="${this._escAttr(entry.title)}">${__fhEsc(entry.icon)} ${this._esc(entry.title)}</option>`).join("")}</optgroup>`)
       .join("");
     select.innerHTML = `<option value="">${this._t("chores.rm_pick_from_library", "Pick from library… (optional)")}</option>${optgroups}`;
   }
@@ -4884,9 +4884,9 @@ class FamilyHubChoresCard extends HTMLElement {
     const members = this._memberUsers().filter((u) => this._canManageRoutinesFor(u.id));
     const defaultPersonId = this._defaultRoutineManagePersonId(members);
     const personOptions = members
-      .map((u) => `<option value="${u.id}" ${u.id === defaultPersonId ? "selected" : ""}>${this._esc(u.name)}</option>`)
+      .map((u) => `<option value="${__fhEsc(u.id)}" ${u.id === defaultPersonId ? "selected" : ""}>${this._esc(u.name)}</option>`)
       .join("");
-    const categoryOptions = ROUTINE_CATEGORIES.map((c) => `<option value="${c}">${this._routineCategoryLabel(c)}</option>`).join("");
+    const categoryOptions = ROUTINE_CATEGORIES.map((c) => `<option value="${__fhEsc(c)}">${this._routineCategoryLabel(c)}</option>`).join("");
     const dayToggles = WEEKDAY_LABELS.map((label, i) => `<button type="button" class="rm-day-toggle" data-day="${i}">${this._weekdayLabel(i)}</button>`).join("");
     return `
       <div class="routine-manage">
@@ -4954,12 +4954,12 @@ class FamilyHubChoresCard extends HTMLElement {
       ).join("");
       const automate = item.auto_complete_trigger || {};
       return `
-        <div class="rm-item-row" data-id="${item.id}">
+        <div class="rm-item-row" data-id="${__fhEsc(item.id)}">
           <div class="rm-item-edit-form">
             <input type="text" class="rm-edit-title" value="${this._escAttr(item.title)}">
-            <input type="time" class="rm-edit-time" value="${item.due_time || ""}">
+            <input type="time" class="rm-edit-time" value="${__fhEsc(item.due_time || "")}">
             <div class="rm-days" data-role="edit">${dayToggles}</div>
-            <input type="number" class="rm-edit-stars" min="0" placeholder="${this._t("chores.rm_stars_placeholder", "Stars for completing this (optional)")}" value="${item.star_value || ""}">
+            <input type="number" class="rm-edit-stars" min="0" placeholder="${this._t("chores.rm_stars_placeholder", "Stars for completing this (optional)")}" value="${__fhEsc(item.star_value || "")}">
             ${this._approvalToggleHtml("rm-edit-no-approval", !!item.no_approval_required, false, "")}
             <!-- same accordion treatment as the add-form's own
                  copy just above (see its own comment) - this one's re-
@@ -4970,11 +4970,11 @@ class FamilyHubChoresCard extends HTMLElement {
                  _renderRoutineManagePane's own comment on this). Target id
                  includes the item's own id since, in principle, more than
                  one row's accordion-body could exist in the DOM at once. -->
-            <button type="button" class="accordion-toggle" data-target="routine-edit-automate-body-${item.id}">
+            <button type="button" class="accordion-toggle" data-target="routine-edit-automate-body-${__fhEsc(item.id)}">
               <span class="theme-section-label">${this._t("chores.automate", "Automate")}</span>
               <span class="accordion-chevron">&#9660;</span>
             </button>
-            <div class="accordion-body" id="routine-edit-automate-body-${item.id}">
+            <div class="accordion-body" id="routine-edit-automate-body-${__fhEsc(item.id)}">
               <fieldset class="rm-automate-fieldset">
                 <legend>${this._t("chores.rm_automate_legend", "Auto-complete trigger (optional, e.g. \"Dishwasher opened\")")}</legend>
                 <label>${this._t("chores.entity_id_label", "Entity ID")}<input type="text" class="rm-edit-automate-entity" value="${this._escAttr(automate.entity_id || "")}" placeholder="binary_sensor.dishwasher_door"></label>
@@ -4983,8 +4983,8 @@ class FamilyHubChoresCard extends HTMLElement {
               </fieldset>
             </div>
             <div class="rm-item-edit-actions">
-              <button type="button" class="rm-item-save-btn" data-id="${item.id}">${this._t("common.save", "Save")}</button>
-              <button type="button" class="rm-item-cancel-btn" data-id="${item.id}">${this._t("common.cancel", "Cancel")}</button>
+              <button type="button" class="rm-item-save-btn" data-id="${__fhEsc(item.id)}">${this._t("common.save", "Save")}</button>
+              <button type="button" class="rm-item-cancel-btn" data-id="${__fhEsc(item.id)}">${this._t("common.cancel", "Cancel")}</button>
             </div>
           </div>
         </div>
@@ -4992,7 +4992,7 @@ class FamilyHubChoresCard extends HTMLElement {
     }
     const dueBadge = item.due_time ? `<span>${this._esc(this._formatDueTime(item.due_time))}</span>` : "";
     const daysBadge = `<span>${item.days_of_week && item.days_of_week.length ? item.days_of_week.map((d) => this._weekdayLabel(d)).join(" ") : this._t("chores.every_day", "Every day")}</span>`;
-    const starsBadge = item.star_value ? `<span>&#11088; ${item.star_value}${item.no_approval_required ? "" : ` (${this._t("chores.needs_approval", "needs approval")})`}</span>` : "";
+    const starsBadge = item.star_value ? `<span>&#11088; ${__fhEsc(item.star_value)}${item.no_approval_required ? "" : ` (${this._t("chores.needs_approval", "needs approval")})`}</span>` : "";
     const automateBadge = item.auto_complete_trigger ? `<span title="${this._t("chores.auto_completes_from_x", `Auto-completes from ${this._esc(item.auto_complete_trigger.entity_id || "")}`, { x: this._esc(item.auto_complete_trigger.entity_id || "") })}">&#9881;&#65039; ${this._t("chores.auto", "Auto")}</span>` : "";
     // - draggable, same gate as
     // the Edit/Remove buttons right below (reordering is exactly as
@@ -5009,12 +5009,12 @@ class FamilyHubChoresCard extends HTMLElement {
     const dragHandle = canManage ? `<span class="rm-item-drag-handle" title="${this._t("chores.drag_to_reorder", "Drag to reorder")}">&#8942;&#8942;</span>` : "";
     const rowActions = canManage
       ? `
-        <button type="button" class="rm-item-edit-btn" data-id="${item.id}" title="${this._t("common.edit", "Edit")}">&#9998;</button>
-        <button type="button" class="rm-item-delete-btn" data-id="${item.id}" title="${this._t("chores.remove", "Remove")}">&times;</button>
+        <button type="button" class="rm-item-edit-btn" data-id="${__fhEsc(item.id)}" title="${this._t("common.edit", "Edit")}">&#9998;</button>
+        <button type="button" class="rm-item-delete-btn" data-id="${__fhEsc(item.id)}" title="${this._t("chores.remove", "Remove")}">&times;</button>
       `
       : "";
     return `
-      <div class="rm-item-row" data-id="${item.id}" draggable="${canManage ? "true" : "false"}">
+      <div class="rm-item-row" data-id="${__fhEsc(item.id)}" draggable="${canManage ? "true" : "false"}">
         ${dragHandle}
         <div class="rm-item-body">
           <div class="rm-item-title">${this._esc(item.title)}</div>
@@ -5347,7 +5347,7 @@ class FamilyHubChoresCard extends HTMLElement {
     const g = goal || {};
     const rewardType = g.reward_type || "stars";
     const catalogOptions = this._catalog
-      .map((it) => `<option value="${it.id}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${it.cost_stars}&#11088;)</option>`)
+      .map((it) => `<option value="${__fhEsc(it.id)}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${__fhEsc(it.cost_stars)}&#11088;)</option>`)
       .join("");
     return `
       <label>${__fhT("text.reward", "Reward", null, "h")}
@@ -5356,7 +5356,7 @@ class FamilyHubChoresCard extends HTMLElement {
           <option data-fh-t="text.a_specific_reward_from_the_catalog" value="catalog_item" ${rewardType === "catalog_item" ? "selected" : ""}>${__fhT("text.a_specific_reward_from_the_catalog", "A specific reward from the catalog", null, "h")}</option>
         </select>
       </label>
-      <label class="g-star-value-field">${__fhT("text.how_many_stars", "How many stars", null, "h")}<input type="number" class="g-star-value" min="1" value="${g.star_value || 1}"></label>
+      <label class="g-star-value-field">${__fhT("text.how_many_stars", "How many stars", null, "h")}<input type="number" class="g-star-value" min="1" value="${__fhEsc(g.star_value || 1)}"></label>
       <label class="g-reward-item-field">${__fhT("text.which_reward", "Which reward", null, "h")}<select class="g-reward-item">${catalogOptions}</select></label>
     `;
   }
@@ -5526,11 +5526,11 @@ class FamilyHubChoresCard extends HTMLElement {
     const rotationGroup = chore.rotation_group || [];
     const dependencies = chore.dependencies || [];
     const userOptions = this._memberUsers()
-      .map((u) => `<option value="${u.id}" ${rotationGroup.includes(u.id) ? "selected" : ""}>${this._esc(u.name)}</option>`)
+      .map((u) => `<option value="${__fhEsc(u.id)}" ${rotationGroup.includes(u.id) ? "selected" : ""}>${this._esc(u.name)}</option>`)
       .join("");
     const depOptions = this._chores
       .filter((c) => c.status !== "approved" && c.id !== choreId)
-      .map((c) => `<option value="${c.id}" ${dependencies.includes(c.id) ? "selected" : ""}>${this._esc(c.title)}</option>`)
+      .map((c) => `<option value="${__fhEsc(c.id)}" ${dependencies.includes(c.id) ? "selected" : ""}>${this._esc(c.title)}</option>`)
       .join("");
     const createTrigger = chore.auto_create_trigger || {};
     const completeTrigger = chore.auto_complete_trigger || {};
@@ -5545,10 +5545,10 @@ class FamilyHubChoresCard extends HTMLElement {
       <button data-fh-aria="text.close" type="button" class="modal-close edit-modal-close" aria-label="${__fhT("text.close", "Close", null, "h")}">&#10005;</button>
       <h2 data-fh-t="text.edit_chore">${__fhT("text.edit_chore", "Edit chore", null, "h")}</h2>
       <div class="field"><label data-fh-t="text.title">${__fhT("text.title", "Title", null, "h")}</label><input type="text" class="f-title" value="${this._escAttr(chore.title)}"></div>
-      <div class="field"><label data-fh-t="text.star_value">${__fhT("text.star_value", "Star value", null, "h")}</label><input type="number" class="f-stars" min="0" value="${chore.star_value || 0}"></div>
+      <div class="field"><label data-fh-t="text.star_value">${__fhT("text.star_value", "Star value", null, "h")}</label><input type="number" class="f-stars" min="0" value="${__fhEsc(chore.star_value || 0)}"></div>
       <div class="field"><label data-fh-t="text.due_date">${__fhT("text.due_date", "Due date", null, "h")}</label><input type="datetime-local" class="f-due" value="${this._isoToLocalDatetimeInputValue(chore.due_date)}"></div>
       ${this._remindFieldsHtml(chore)}
-      <div class="field"><label data-fh-t="text.overdue_penalty_stars">${__fhT("text.overdue_penalty_stars", "Overdue penalty (stars)", null, "h")}</label><input type="number" class="f-penalty" min="0" value="${chore.overdue_penalty || 0}"></div>
+      <div class="field"><label data-fh-t="text.overdue_penalty_stars">${__fhT("text.overdue_penalty_stars", "Overdue penalty (stars)", null, "h")}</label><input type="number" class="f-penalty" min="0" value="${__fhEsc(chore.overdue_penalty || 0)}"></div>
       <!-- - see the
            create modal's own copy of this comment for the full history
            (v198's Automate sub-tab, then v211's split into three sibling
@@ -5573,8 +5573,8 @@ class FamilyHubChoresCard extends HTMLElement {
         </div>
         ${this._approvalToggleHtml("f-no-approval", !!chore.no_approval_required, !(this._canStarOverride() || chore.no_approval_required), "Only an admin (or someone granted star-override permission) can mark a chore as not requiring approval.")}
         ${this._alarmAudienceToggleHtml("f-alarm-audience", chore.alarm_audience)}
-        <div class="field" title="Optional - e.g. 3 for &quot;3 loads of laundry&quot;. Tapping Done counts down one unit at a time; only the last one triggers approval/stars. Changing this resets the current count."><label data-fh-t="text.quantity_optional_e_g_3_loads_of_laundry">${__fhT("text.quantity_optional_e_g_3_loads_of_laundry", "Quantity (optional - e.g. 3 loads of laundry)", null, "h")}</label><input data-fh-placeholder="text.leave_blank_for_a_normal_chore" type="number" class="f-quantity" min="1" placeholder="${__fhT("text.leave_blank_for_a_normal_chore", "Leave blank for a normal chore", null, "h")}" value="${chore.quantity_total || ""}"></div>
-        <div class="field" title="Optional - e.g. 30 for &quot;clean for 30 minutes&quot;. Adds a Start button to the chore; when the countdown runs out the chore completes itself exactly as if Done had been tapped, so it still respects whatever approval rules already apply."><label data-fh-t="text.timer_optional_minutes">${__fhT("text.timer_optional_minutes", "Timer (optional - minutes)", null, "h")}</label><input data-fh-placeholder="text.leave_blank_for_no_timer" type="number" class="f-timer-minutes" min="1" max="1440" placeholder="${__fhT("text.leave_blank_for_no_timer", "Leave blank for no timer", null, "h")}" value="${chore.timer_minutes || ""}"></div>
+        <div class="field" title="Optional - e.g. 3 for &quot;3 loads of laundry&quot;. Tapping Done counts down one unit at a time; only the last one triggers approval/stars. Changing this resets the current count."><label data-fh-t="text.quantity_optional_e_g_3_loads_of_laundry">${__fhT("text.quantity_optional_e_g_3_loads_of_laundry", "Quantity (optional - e.g. 3 loads of laundry)", null, "h")}</label><input data-fh-placeholder="text.leave_blank_for_a_normal_chore" type="number" class="f-quantity" min="1" placeholder="${__fhT("text.leave_blank_for_a_normal_chore", "Leave blank for a normal chore", null, "h")}" value="${__fhEsc(chore.quantity_total || "")}"></div>
+        <div class="field" title="Optional - e.g. 30 for &quot;clean for 30 minutes&quot;. Adds a Start button to the chore; when the countdown runs out the chore completes itself exactly as if Done had been tapped, so it still respects whatever approval rules already apply."><label data-fh-t="text.timer_optional_minutes">${__fhT("text.timer_optional_minutes", "Timer (optional - minutes)", null, "h")}</label><input data-fh-placeholder="text.leave_blank_for_no_timer" type="number" class="f-timer-minutes" min="1" max="1440" placeholder="${__fhT("text.leave_blank_for_no_timer", "Leave blank for no timer", null, "h")}" value="${__fhEsc(chore.timer_minutes || "")}"></div>
         <div class="field"><label data-fh-t="text.notes">${__fhT("text.notes", "Notes", null, "h")}</label><textarea data-fh-placeholder="text.any_details_worth_knowing_which_bin" class="f-notes" rows="3" placeholder="${__fhT("text.any_details_worth_knowing_which_bin", "Any details worth knowing - which bin, where to leave it, etc.", null, "h")}">${this._esc(chore.notes || "")}</textarea></div>
         <div class="field"><label data-fh-t="text.depends_on">${__fhT("text.depends_on", "Depends on", null, "h")}</label><select class="f-deps" multiple>${depOptions}</select></div>
         ${rotationFieldHtml}

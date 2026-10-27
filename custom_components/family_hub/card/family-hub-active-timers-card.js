@@ -69,7 +69,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -701,9 +701,9 @@ class FamilyHubActiveTimersCard extends HTMLElement {
     return this._hass && this._hass.user ? this._hass.user.id : null;
   }
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   _defaultTheme() {
     return {
@@ -1330,7 +1330,7 @@ class FamilyHubActiveTimersCard extends HTMLElement {
     this._draftAlarmAudience = "self";
     this._draftSpeakers = [];
     const presetBtns = TIMER_PRESETS.map(
-      (m) => `<button type="button" class="preset-btn" data-minutes="${m}">${this._formatTimerLength(m)}</button>`
+      (m) => `<button type="button" class="preset-btn" data-minutes="${__fhEsc(m)}">${this._formatTimerLength(m)}</button>`
     ).join("");
     const speakerChips = ((this._getSettings() || {}).alarmDevices || [])
       .filter((d) => d && d.entity_id)
@@ -1586,8 +1586,8 @@ class FamilyHubActiveTimersCard extends HTMLElement {
       }
     }
     return `<div class="log-entry log-${this._esc(e.ringing ? "ringing" : e.outcome || "unknown")}">
-      <div class="log-top"><span class="log-kind">${kinds[e.kind] || kinds.standalone}</span><span class="log-title">${this._esc(e.title || kinds[e.kind] || "Timer")}</span><span class="log-outcome">${outcomeLabel}</span></div>
-      ${lines.map((l) => `<div class="log-line">${l}</div>`).join("")}
+      <div class="log-top"><span class="log-kind">${(kinds[e.kind] ? __fhEsc(kinds[e.kind]) : kinds.standalone)}</span><span class="log-title">${this._esc(e.title || kinds[e.kind] || "Timer")}</span><span class="log-outcome">${outcomeLabel}</span></div>
+      ${lines.map((l) => `<div class="log-line">${__fhEsc(l)}</div>`).join("")}
       ${e.ringing ? `<button type="button" class="log-stop-btn" data-uid="${this._esc(e.uid)}">${t("active_timers.log_stop", "Stop alarm")}</button>` : ""}
     </div>`;
   }

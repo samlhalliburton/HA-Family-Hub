@@ -13,7 +13,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -718,12 +718,12 @@ class FamilyRightNowCard extends HTMLElement {
       const pct = parseFloat(stateObj.state);
       if (Number.isNaN(pct)) return "";
       const low = pct <= 20;
-      return `<span class="sensor-pill battery-pill${low ? " low-battery" : ""}" data-entity="${entity}">&#128267; ${Math.round(pct)}%</span>`;
+      return `<span class="sensor-pill battery-pill${low ? " low-battery" : ""}" data-entity="${__fhEsc(entity)}">&#128267; ${Math.round(pct)}%</span>`;
     }
     const unit = (stateObj.attributes && stateObj.attributes.unit_of_measurement) || "";
     const raw = stateObj.state;
     if (raw === undefined || raw === null || raw === "") return "";
-    return `<span class="sensor-pill" data-entity="${entity}">${raw}${unit ? ` ${unit}` : ""}</span>`;
+    return `<span class="sensor-pill" data-entity="${__fhEsc(entity)}">${__fhEsc(raw)}${unit ? ` ${__fhEsc(unit)}` : ""}</span>`;
   }
   // Household ask: "can the pills support actions like toggle, more
   // info etc" - a tap toggles an entity whose domain actually has an
@@ -1743,7 +1743,7 @@ ha-card.embedded {
   _renderPersonTile(person, now, people) {
     const { current, next } = this._statusFor(person.entity, now);
     const initial = this._discreetInitial(person, people) || (person.name || "?").trim().charAt(0).toUpperCase() || "?";
-    const displayName = this._discreetPersonName(person, people);
+    const displayName = __fhEsc(this._discreetPersonName(person, people));
     const textColor = this._textColorFor(person.color);
     const presenceEntity = this._presenceByCalendarEntity()[person.entity] || "";
     let presenceHtml = "";
@@ -1762,7 +1762,7 @@ ha-card.embedded {
     if (!current) {
       currentHtml = `<div class="current-free">${this._t("right_now.free", "Free")}</div>`;
     } else {
-      const titleText = this._discreetText(`${current.badgePrefix ? current.badgePrefix + " " : ""}${current.summary}`);
+      const titleText = __fhEsc(this._discreetText(`${current.badgePrefix ? current.badgePrefix + " " : ""}${current.summary}`));
       if (current.allDay) {
         currentHtml = `<div class="current-title">${titleText}</div><div class="current-until standalone">${this._t("right_now.all_day", "All day")}</div>`;
       } else {
@@ -1774,15 +1774,15 @@ ha-card.embedded {
     }
     let nextHtml;
     if (next) {
-      const nextTitle = this._discreetText(`${next.badgePrefix ? next.badgePrefix + " " : ""}${next.summary}`);
+      const nextTitle = __fhEsc(this._discreetText(`${next.badgePrefix ? next.badgePrefix + " " : ""}${next.summary}`));
       nextHtml = `<div class="next-label">${this._t("right_now.next", "Next:")} ${nextTitle} <span class="next-time">${next.allDay ? this._t("right_now.all_day", "All day") : this._fmtTime(next.start)}</span></div>`;
     } else {
       nextHtml = `<div class="next-label next-empty">${this._t("right_now.no_upcoming", "No upcoming events")}</div>`;
     }
     return `
-<div class="person-tile" style="--person-color:${person.color};--person-bg:${this._hexToRgba(person.color, 0.16)}">
+<div class="person-tile" style="--person-color:${__fhEsc(person.color)};--person-bg:${__fhEsc(this._hexToRgba(person.color, 0.16))}">
   <div class="person-head">
-    <div class="avatar" style="background:${person.color};color:${textColor}">${initial}</div>
+    <div class="avatar" style="background:${__fhEsc(person.color)};color:${__fhEsc(textColor)}">${__fhEsc(initial)}</div>
     <div class="person-name">${displayName}</div>
     ${presenceHtml}
     ${sensorsHtml}

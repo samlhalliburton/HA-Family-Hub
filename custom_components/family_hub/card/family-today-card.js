@@ -13,7 +13,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -1771,12 +1771,12 @@ class FamilyTodayCard extends HTMLElement {
     const root = this._root;
     const select = root.querySelector(".add-event-calendar-select");
     select.innerHTML = this._getPeople()
-      .map((p) => `<option value="${p.entity}">${p.name}</option>`)
+      .map((p) => `<option value="${__fhEsc(p.entity)}">${__fhEsc(p.name)}</option>`)
       .join("");
     const remListSelect = root.querySelector(".add-event-reminder-list-select");
     if (remListSelect) {
       remListSelect.innerHTML = this._addableRemindersLists()
-        .map((l) => `<option value="${l.entity}">${l.label}</option>`)
+        .map((l) => `<option value="${__fhEsc(l.entity)}">${__fhEsc(l.label)}</option>`)
         .join("");
       remListSelect.value = this._config.reminders_entity;
     }
@@ -1845,7 +1845,7 @@ class FamilyTodayCard extends HTMLElement {
     const checkboxesHtml = others
       .map((p) => {
         const color = this._colorFor(p, colorMap);
-        return `<label class="remind-check-opt"><input type="checkbox" class="add-event-people-check" value="${p.entity}" /><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color}"></span>${p.name}</label>`;
+        return `<label class="remind-check-opt"><input type="checkbox" class="add-event-people-check" value="${__fhEsc(p.entity)}" /><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color}"></span>${__fhEsc(p.name)}</label>`;
       })
       .join("");
     content.innerHTML = `<div class="remind-check-row">${checkboxesHtml}</div>`;
@@ -1862,7 +1862,7 @@ class FamilyTodayCard extends HTMLElement {
           .map(
             (item, i) =>
               `<div class="checklist-item-row">` +
-              `<span class="checklist-item-row-text">${item.text}</span>` +
+              `<span class="checklist-item-row-text">${__fhEsc(item.text)}</span>` +
               `<button type="button" class="checklist-item-remove-btn" data-index="${i}" title="${this._t("today.add_event.remove_item_title", "Remove")}">&#10005;</button>` +
               `</div>`
           )
@@ -1888,7 +1888,7 @@ class FamilyTodayCard extends HTMLElement {
     if (!candidates) return;
     const previous = select.value;
     select.innerHTML = candidates.length
-      ? candidates.map((c) => `<option value="${c.entity_id}">${c.name}</option>`).join("")
+      ? candidates.map((c) => `<option value="${__fhEsc(c.entity_id)}">${__fhEsc(c.name)}</option>`).join("")
       : `<option value="">${this._t("today.add_event.no_todo_lists_found", "No to-do lists found")}</option>`;
     if (previous && candidates.some((c) => c.entity_id === previous)) select.value = previous;
   }
@@ -2567,11 +2567,11 @@ background-image: var(--fc-bg-overlay-image, none);
     root.querySelector(".detail-title").textContent = title || "";
     const body = root.querySelector(".detail-body");
     body.innerHTML = (rows || [])
-      .map((r) => `<div class="detail-row${r.secondary ? " secondary" : ""}">${r.text}</div>`)
+      .map((r) => `<div class="detail-row${r.secondary ? " secondary" : ""}">${__fhEsc(r.text)}</div>`)
       .join("");
     const actions = root.querySelector(".detail-actions");
     if (actionLabel && actionHandler) {
-      actions.innerHTML = `<button type="button" class="detail-open-link-btn">${actionLabel}</button>`;
+      actions.innerHTML = `<button type="button" class="detail-open-link-btn">${__fhEsc(actionLabel)}</button>`;
       actions.querySelector("button").addEventListener("click", actionHandler);
     } else {
       actions.innerHTML = "";
@@ -2593,7 +2593,7 @@ background-image: var(--fc-bg-overlay-image, none);
     const badgesEl = this._root.querySelector(".header-badges");
     if (badgesEl) {
       badgesEl.innerHTML = (this._todayBadges || [])
-        .map((b) => `<span class="custody-badge" style="background:${b.color};color:${this._textColorFor(b.color)}">${b.text}</span>`)
+        .map((b) => `<span class="custody-badge" style="background:${__fhEsc(b.color)};color:${__fhEsc(this._textColorFor(b.color))}">${__fhEsc(b.text)}</span>`)
         .join("");
     }
     this._renderFooterActions();
@@ -2674,7 +2674,7 @@ background-image: var(--fc-bg-overlay-image, none);
       eventsEl.innerHTML = this._todayEvents
         .map((ev, idx) => {
           const meta = ev.allDay ? this._t("today.detail.all_day", "All day") : this._fmtTime(ev.start);
-          return `<div class="row" data-idx="${idx}"><span class="dot" style="background:${ev.color}"></span><span class="label">${ev.summary}</span><span class="meta">${meta}</span></div>`;
+          return `<div class="row" data-idx="${idx}"><span class="dot" style="background:${__fhEsc(ev.color)}"></span><span class="label">${__fhEsc(ev.summary)}</span><span class="meta">${__fhEsc(meta)}</span></div>`;
         })
         .join("");
       eventsEl.querySelectorAll(".row").forEach((row) => {
@@ -2690,7 +2690,7 @@ background-image: var(--fc-bg-overlay-image, none);
       mealsEl.innerHTML = `<div class="empty">${this._t("today.sectioned.meals_empty", "Nothing planned yet.")}</div>`;
     } else {
       mealsEl.innerHTML = this._todayMeals
-        .map((m, idx) => `<div class="row" data-idx="${idx}"><span class="dot" style="background:${m.color || "var(--fc-accent2)"}"></span><span class="label">${m.name}</span><span class="meta">${m.label}</span></div>`)
+        .map((m, idx) => `<div class="row" data-idx="${idx}"><span class="dot" style="background:${__fhEsc(m.color || "var(--fc-accent2)")}"></span><span class="label">${__fhEsc(m.name)}</span><span class="meta">${__fhEsc(m.label)}</span></div>`)
         .join("");
       mealsEl.querySelectorAll(".row").forEach((row) => {
         row.addEventListener("click", () => {
@@ -2708,7 +2708,7 @@ background-image: var(--fc-bg-overlay-image, none);
       remindersEl.innerHTML = this._todayReminders
         .map(
           (r, idx) =>
-            `<div class="row" data-idx="${idx}"><span class="dot" style="background:${r.color || TODAY_REMINDER_COLOR}"></span><span class="label">&#128276; ${r.summary}${r.personName ? ` <span class="reminder-owner">(${r.personName})</span>` : ""}</span><span class="meta">${this._fmtTime(r.due)}</span><button type="button" class="done-btn" data-uid="${r.uid}" data-list-entity="${r.listEntity}">${doneLabel}</button></div>`
+            `<div class="row" data-idx="${idx}"><span class="dot" style="background:${__fhEsc(r.color || TODAY_REMINDER_COLOR)}"></span><span class="label">&#128276; ${__fhEsc(r.summary)}${r.personName ? ` <span class="reminder-owner">(${__fhEsc(r.personName)})</span>` : ""}</span><span class="meta">${this._fmtTime(r.due)}</span><button type="button" class="done-btn" data-uid="${__fhEsc(r.uid)}" data-list-entity="${__fhEsc(r.listEntity)}">${doneLabel}</button></div>`
         )
         .join("");
       remindersEl.querySelectorAll(".done-btn").forEach((btn) => {
@@ -2748,7 +2748,7 @@ background-image: var(--fc-bg-overlay-image, none);
     const mealsHtml = (this._todayMeals || [])
       .map(
         (m, idx) =>
-          `<div class="msd-item mc-meal-pill" data-kind="meal" data-idx="${idx}" style="background:${m.color || "#f0e6c4"}">\u{1F37D}\u{FE0F} ${m.name}</div>`
+          `<div class="msd-item mc-meal-pill" data-kind="meal" data-idx="${idx}" style="background:${__fhEsc(m.color || "#f0e6c4")}">\u{1F37D}\u{FE0F} ${__fhEsc(m.name)}</div>`
       )
       .join("");
 
@@ -2765,9 +2765,9 @@ background-image: var(--fc-bg-overlay-image, none);
       ? combined
           .map(
             (it) =>
-              `<div class="msd-item" data-kind="${it.kind}" data-idx="${it.idx}" style="background:${it.color};color:${this._textColorFor(it.color)}">` +
+              `<div class="msd-item" data-kind="${__fhEsc(it.kind)}" data-idx="${__fhEsc(it.idx)}" style="background:${__fhEsc(it.color)};color:${__fhEsc(this._textColorFor(it.color))}">` +
               `<span class="msd-item-time">${it.allDay ? this._t("today.detail.all_day", "All day") : this._fmtTime(it.start)}</span>` +
-              `<span class="msd-item-summary">${it.isReminder ? "&#128276; " : ""}${it.summary}</span>` +
+              `<span class="msd-item-summary">${it.isReminder ? "&#128276; " : ""}${__fhEsc(it.summary)}</span>` +
               `</div>`
           )
           .join("")

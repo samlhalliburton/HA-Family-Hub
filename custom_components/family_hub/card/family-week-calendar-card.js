@@ -46,7 +46,91 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+};
+// URL allowlist for href/src built from data (recipe links, photos, todo
+// links). Only http(s), mailto/tel (links) and same-origin paths pass;
+// javascript:, vbscript:, and non-image data: URLs never do. Returns ""
+// for anything else. Image data: URLs are allowed only when forImg is true.
+var __fhSafeUrl = function (u, forImg) {
+  var raw = String(u == null ? "" : u);
+  var s = "";
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw.charCodeAt(i);
+    // drop whitespace/control/zero-width characters browsers ignore inside a scheme ("java\tscript:")
+    if (c <= 32 || (c >= 127 && c <= 159) || (c >= 8203 && c <= 8207) || c === 8232 || c === 8233 || c === 65279) continue;
+    s += raw.charAt(i);
+  }
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return String(u).trim();
+  if (/^\/(?![\/\\])/.test(s)) return String(u).trim();
+  if (!forImg && /^(mailto|tel):/i.test(s)) return String(u).trim();
+  if (forImg && /^data:image\/(png|jpe?g|gif|webp|avif);/i.test(s)) return String(u).trim();
+  return "";
+};
+// A URL for use inside CSS url('...') within a double-quoted style attribute:
+// scheme-checked, quote/paren/space characters percent-encoded, then HTML-escaped.
+var __fhCssUrl = function (u) {
+  var s = __fhSafeUrl(u, true);
+  if (!s) return "";
+  return __fhEsc(s.replace(/[\s'"()\\]/g, function (c) { return "%" + ("0" + c.charCodeAt(0).toString(16).toUpperCase()).slice(-2); }));
+};
+// Allow-list HTML sanitizer for markup that arrives from outside this card
+// (Grocy recipe descriptions, imported recipe pages). Parsing happens in an
+// inert DOMParser document, so nothing runs or loads while it is cleaned.
+// Unknown tags are unwrapped, dangerous ones removed with their contents,
+// and every attribute not on the short list below is dropped.
+var __fhSanitizeHtml = function (html) {
+  var KEEP = { A: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, BR: 1, P: 1, UL: 1, OL: 1, LI: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, HR: 1, SPAN: 1, DIV: 1, IMG: 1, SUB: 1, SUP: 1, SMALL: 1, BLOCKQUOTE: 1, CODE: 1, PRE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1 };
+  var DROP = { SCRIPT: 1, STYLE: 1, IFRAME: 1, FRAME: 1, FRAMESET: 1, OBJECT: 1, EMBED: 1, SVG: 1, MATH: 1, TEMPLATE: 1, NOSCRIPT: 1, LINK: 1, META: 1, BASE: 1, TITLE: 1, FORM: 1, INPUT: 1, BUTTON: 1, TEXTAREA: 1, SELECT: 1, OPTION: 1, AUDIO: 1, VIDEO: 1, SOURCE: 1, CANVAS: 1, APPLET: 1 };
+  var doc;
+  try {
+    doc = new DOMParser().parseFromString("<!doctype html><body>" + String(html == null ? "" : html), "text/html");
+  } catch (e) {
+    return __fhEsc(html);
+  }
+  var clean = function (node) {
+    Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+      if (child.nodeType === 3) return;
+      if (child.nodeType !== 1) {
+        node.removeChild(child);
+        return;
+      }
+      var tag = child.tagName.toUpperCase();
+      if (DROP[tag]) {
+        node.removeChild(child);
+        return;
+      }
+      clean(child);
+      if (!KEEP[tag]) {
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        node.removeChild(child);
+        return;
+      }
+      Array.prototype.slice.call(child.attributes).forEach(function (a) {
+        var n = a.name.toLowerCase();
+        if (tag === "A" && n === "href") {
+          var h = __fhSafeUrl(a.value, false);
+          if (h) child.setAttribute("href", h);
+          else child.removeAttribute(a.name);
+        } else if (tag === "IMG" && n === "src") {
+          var src = __fhSafeUrl(a.value, true);
+          if (src) child.setAttribute("src", src);
+          else child.removeAttribute(a.name);
+        } else if ((tag === "IMG" && n === "alt") || ((tag === "A" || tag === "IMG") && n === "title")) {
+          /* plain-text attributes - kept */
+        } else {
+          child.removeAttribute(a.name);
+        }
+      });
+      if (tag === "A") {
+        child.setAttribute("rel", "noopener noreferrer");
+        child.setAttribute("target", "_blank");
+      }
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML;
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -495,7 +579,7 @@ if (!window.__familyHubQr) {
         });
       });
       const label = (opts && opts.label) || __fhT("text.qr_code", "QR code");
-      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+      const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${dim} ${dim}" shape-rendering="crispEdges" role="img" aria-label="${esc(label)}"><rect width="${dim}" height="${dim}" fill="#ffffff"/><path d="${path}" fill="#000000"/></svg>`;
     }
     return { encode, svg };
@@ -1719,9 +1803,9 @@ const isSelected = selectMode && this._recipeBoxSelectedUids.has(r.uid);
 const initial = (r.name || "?").trim().charAt(0).toUpperCase();
 if (isListView) {
 const media = r.image
-? `<div class="recipe-row-media" style="background-image:url('${String(r.image).replace(/'/g, "%27")}')"></div>`
+? `<div class="recipe-row-media" style="background-image:url('${__fhCssUrl(r.image)}')"></div>`
 : `<div class="recipe-row-media recipe-row-media-placeholder"><span>${initial}</span></div>`;
-const category = r.category ? `<span class="recipe-row-category">${r.category}</span>` : "";
+const category = r.category ? `<span class="recipe-row-category">${__fhEsc(r.category)}</span>` : "";
 const trailing = selectMode
 ? `<div class="recipe-row-select-badge">${isSelected ? "&#10003;" : ""}</div>`
 : `<div class="recipe-row-actions">
@@ -1731,16 +1815,16 @@ const trailing = selectMode
 return `<div class="recipe-row ${isSelected ? "is-selected" : ""}" data-idx="${idx}">
 ${media}
 <div class="recipe-row-body">
-<div class="recipe-row-name">${r.name}</div>
+<div class="recipe-row-name">${__fhEsc(r.name)}</div>
 ${category}
 </div>
 ${trailing}
 </div>`;
 }
 const media = r.image
-? `<div class="recipe-card-media" style="background-image:url('${String(r.image).replace(/'/g, "%27")}')"></div>`
+? `<div class="recipe-card-media" style="background-image:url('${__fhCssUrl(r.image)}')"></div>`
 : `<div class="recipe-card-media recipe-card-media-placeholder"><span>${initial}</span></div>`;
-const category = r.category ? `<span class="recipe-card-category">${r.category}</span>` : "";
+const category = r.category ? `<span class="recipe-card-category">${__fhEsc(r.category)}</span>` : "";
 const overlay = selectMode
 ? `<div class="recipe-card-select-badge">${isSelected ? "&#10003;" : ""}</div>`
 : `<button type="button" class="recipe-card-heart ${isLoved ? "is-loved" : ""}" data-idx="${idx}" title="${isLoved ? __fhT("text.remove_from_loved", "Remove from loved", null, "h") : __fhT("text.love_this_dish", "Love this dish", null, "h")}">${isLoved ? "&#10084;&#65039;" : "&#129293;"}</button>
@@ -1749,7 +1833,7 @@ return `<div class="recipe-card ${isSelected ? "is-selected" : ""}" data-idx="${
 ${media}
 ${overlay}
 <div class="recipe-card-body">
-<div class="recipe-card-name">${r.name}</div>
+<div class="recipe-card-name">${__fhEsc(r.name)}</div>
 ${category}
 </div>
 </div>`;
@@ -2012,7 +2096,7 @@ this._recipeBoxCategory = "All";
 container.innerHTML = chips
 .map(
 (c) =>
-`<button type="button" class="recipe-chip ${c === this._recipeBoxCategory ? "active" : ""}" data-category="${c.replace(/"/g, "&quot;")}">${c}</button>`
+`<button type="button" class="recipe-chip ${c === this._recipeBoxCategory ? "active" : ""}" data-category="${c.replace(/"/g, "&quot;")}">${__fhEsc(c)}</button>`
 )
 .join("");
 container.querySelectorAll(".recipe-chip").forEach((el) => {
@@ -2041,7 +2125,7 @@ const ratingHtml =
 ? `<span data-fh-t="text.loved" class="event-info-chip" style="background:#f2ddd4">${__fhT("text.loved", "❤️ Loved", null, "h")}</span>`
 : recipe.rating === "down"
 ? `<span data-fh-t="text.not_a_fan" class="event-info-chip" style="background:#d8e3e0">${__fhT("text.not_a_fan", "👎 Not a fan", null, "h")}</span>`
-: "") + (recipe.category ? `<span class="event-info-chip">${recipe.category}</span>` : "");
+: "") + (recipe.category ? `<span class="event-info-chip">${__fhEsc(recipe.category)}</span>` : "");
 root.querySelector(".dish-detail-rating").innerHTML = ratingHtml;
 root.querySelector(".dish-detail-desc").textContent = recipe.description || __fhT("text.no_notes_added", "No notes added.");
 const stepsEl = root.querySelector(".dish-detail-steps");
@@ -2126,7 +2210,9 @@ _fhEscapeHtml(s) {
 return String(s == null ? "" : s)
 .replace(/&/g, "&amp;")
 .replace(/</g, "&lt;")
-.replace(/>/g, "&gt;");
+.replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;")
+.replace(/'/g, "&#39;");
 },
 _fhParsePreparationBlocks(inner) {
 const blocks = [];
@@ -2166,17 +2252,17 @@ checkedSteps = checkedSteps || new Set();
 let stepNum = 0;
 const rows = blocks.map((b, idx) => {
 if (b.type === "header") {
-return `<div class="grocy-recipe-step-header">${b.text || ""}</div>`;
+return `<div class="grocy-recipe-step-header">${__fhSanitizeHtml(b.text || "")}</div>`;
 }
 if (b.type === "divider") {
 return `<hr class="grocy-recipe-step-divider" />`;
 }
 if (b.type === "image") {
-return `<div class="grocy-recipe-step-image-wrap"><img class="grocy-recipe-step-image" src="${b.url || ""}" /></div>`;
+return `<div class="grocy-recipe-step-image-wrap"><img class="grocy-recipe-step-image" src="${__fhEsc(__fhSafeUrl(b.url, true))}" /></div>`;
 }
 stepNum++;
 const checked = checkedSteps.has(idx) ? " checked-off" : "";
-return `<label class="grocy-recipe-instruction-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-instruction-check"${checked ? " checked" : ""} /><span class="grocy-recipe-instruction-badge">${stepNum}</span><span class="grocy-recipe-instruction-text">${b.text || ""}</span></label>`;
+return `<label class="grocy-recipe-instruction-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-instruction-check"${checked ? " checked" : ""} /><span class="grocy-recipe-instruction-badge">${stepNum}</span><span class="grocy-recipe-instruction-text">${__fhSanitizeHtml(b.text || "")}</span></label>`;
 });
 return `<div data-fh-t="text.instructions" class="grocy-recipe-instructions-title">${__fhT("text.instructions", "Instructions", null, "h")}</div>` + rows.join("");
 },
@@ -2305,13 +2391,13 @@ if (b.type === "divider") {
 return `<div class="fh-step-editor-row fh-step-editor-divider-row" data-idx="${idx}">${dragHandle}<span class="fh-step-editor-divider-label">&mdash; divider &mdash;</span>${controls}</div>`;
 }
 if (b.type === "image") {
-return `<div class="fh-step-editor-row fh-step-editor-image-row" data-idx="${idx}">${dragHandle}<img class="fh-step-editor-image-preview" src="${b.url || ""}" />${controls}</div>`;
+return `<div class="fh-step-editor-row fh-step-editor-image-row" data-idx="${idx}">${dragHandle}<img class="fh-step-editor-image-preview" src="${__fhEsc(__fhSafeUrl(b.url || "", true))}" />${controls}</div>`;
 }
 return (
 `<div class="fh-step-editor-row fh-step-editor-step-row" data-idx="${idx}">` +
 dragHandle +
 `<span class="fh-step-editor-step-num">${idx + 1}</span>` +
-`<textarea data-fh-placeholder="text.step_text" class="fh-step-editor-text-input" data-idx="${idx}" placeholder="${__fhT("text.step_text", "Step text", null, "h")}">${b.text || ""}</textarea>` +
+`<textarea data-fh-placeholder="text.step_text" class="fh-step-editor-text-input" data-idx="${idx}" placeholder="${__fhT("text.step_text", "Step text", null, "h")}">${__fhEsc(b.text || "")}</textarea>` +
 controls +
 `</div>`
 );
@@ -2613,7 +2699,7 @@ if (this._grocyRecipeViewerTabs) {
 tabsEl.innerHTML = this._grocyRecipeViewerTabs
 .map(
 (t) =>
-`<button type="button" class="grocy-recipe-viewer-tab-btn ${String(t.id) === String(recipeId) ? "active" : ""}" data-recipe-tab-id="${t.id}">${t.name || __fhT("text.recipe", "Recipe", null, "h")}</button>`
+`<button type="button" class="grocy-recipe-viewer-tab-btn ${String(t.id) === String(recipeId) ? "active" : ""}" data-recipe-tab-id="${__fhEsc(t.id)}">${(t.name ? __fhEsc(t.name) : __fhT("text.recipe", "Recipe", null, "h"))}</button>`
 )
 .join("");
 tabsEl.style.display = "flex";
@@ -2818,7 +2904,7 @@ const statDefs = [
 ["Total", recipe.total_time],
 ].filter(([, value]) => (value || "").trim());
 statsEl.innerHTML = statDefs
-.map(([label, value]) => `<div class="grocy-recipe-stat"><span class="grocy-recipe-stat-label">${label}</span><span class="grocy-recipe-stat-value">${value}</span></div>`)
+.map(([label, value]) => `<div class="grocy-recipe-stat"><span class="grocy-recipe-stat-label">${__fhEsc(label)}</span><span class="grocy-recipe-stat-value">${__fhEsc(value)}</span></div>`)
 .join("");
 this._grocyViewerOverlay().querySelector(".grocy-recipe-viewer-servings").textContent = recipe.servings
 ? __fhT("text.makes_x_serving_x", "Makes %0% serving%1%", {0: recipe.servings, 1: recipe.servings === 1 ? "" : "s"})
@@ -2886,7 +2972,7 @@ return;
 const baseServings = this._grocyRecipeViewerBaseServings || 1;
 const servings = this._grocyRecipeViewerServings || baseServings;
 const ratio = baseServings > 0 ? servings / baseServings : 1;
-let html = this._scaleIngredientsDescriptionHtml(raw, ratio);
+let html = this._scaleIngredientsDescriptionHtml(__fhSanitizeHtml(raw), ratio);
 
 // Recipes imported via this card's own "Import a recipe from a link"
 // flow (_createImportedGrocyRecipe, task #158/#223) write a predictable
@@ -2943,7 +3029,7 @@ const accordionHtml =
 `<span data-fh-t="text.written_out_ingredients_list" class="theme-section-label">${__fhT("text.written_out_ingredients_list", "Written-out ingredients list", null, "h")}</span>` +
 `<span class="accordion-chevron">&#9660;</span>` +
 `</button>` +
-`<div class="accordion-body" id="recipe-viewer-ingredients-body"><ul>${ingredientsBlockMatch[1]}</ul></div>` +
+`<div class="accordion-body" id="recipe-viewer-ingredients-body"><ul>${__fhEsc(ingredientsBlockMatch[1])}</ul></div>` +
 `</div>`;
 html = html.replace(ingredientsBlockMatch[0], accordionHtml);
 }
@@ -3163,9 +3249,9 @@ let groupHtml = "";
 const group = ing.group || "";
 if (group !== lastGroup) {
 lastGroup = group;
-if (group) groupHtml = `<div class="grocy-recipe-ingredient-group">${group}</div>`;
+if (group) groupHtml = `<div class="grocy-recipe-ingredient-group">${__fhEsc(group)}</div>`;
 }
-const note = ing.note ? ` <span class="grocy-recipe-ingredient-note">(${ing.note})</span>` : "";
+const note = ing.note ? ` <span class="grocy-recipe-ingredient-note">(${__fhEsc(ing.note)})</span>` : "";
 const amountText = this._formatScaledIngredientAmount(ing, ratio);
 // Numbered circular badge (task #251/mockup) in place of the amount
 // leading the row - the amount itself moves down alongside the
@@ -3175,7 +3261,7 @@ const amountText = this._formatScaledIngredientAmount(ing, ratio);
 // <label> so tapping anywhere on the row toggles it, not just the
 // small checkbox hit target itself.
 const checked = this._grocyRecipeViewerCheckedIngredients && this._grocyRecipeViewerCheckedIngredients.has(idx) ? " checked-off" : "";
-return `${groupHtml}<label class="grocy-recipe-ingredient-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-ingredient-check"${checked ? " checked" : ""} /><span class="grocy-recipe-ingredient-badge">${idx + 1}</span><span><span class="grocy-recipe-ingredient-amount">${amountText}</span> ${ing.product || ""}${note}</span></label>`;
+return `${groupHtml}<label class="grocy-recipe-ingredient-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-ingredient-check"${checked ? " checked" : ""} /><span class="grocy-recipe-ingredient-badge">${idx + 1}</span><span><span class="grocy-recipe-ingredient-amount">${__fhEsc(amountText)}</span> ${__fhEsc(ing.product || "")}${note}</span></label>`;
 })
 .join("");
 ingredientsEl.querySelectorAll(".grocy-recipe-ingredient-row").forEach((row) => {
@@ -8191,7 +8277,7 @@ this._renderPrivacyUnlockError(el, this._t("privacy.no_pin_set", "No user has a 
 return;
 }
 const pickerButtonsHtml = eligibleWithPin
-.map((u) => `<button type="button" class="fh-privacy-unlock-user-btn" data-user-id="${u.id}">${u.name}</button>`)
+.map((u) => `<button type="button" class="fh-privacy-unlock-user-btn" data-user-id="${__fhEsc(u.id)}">${__fhEsc(u.name)}</button>`)
 .join("");
 el.innerHTML = `<div class="fh-privacy-unlock-box">
 <button type="button" class="fh-privacy-unlock-close-btn" title="${this._t("common.close", "Close")}">&#10005;</button>
@@ -8241,7 +8327,7 @@ pinInput.focus();
 _renderPrivacyUnlockError(el, message) {
 const box = el.querySelector(".fh-privacy-unlock-box");
 if (!box) return;
-box.innerHTML = `<button type="button" class="fh-privacy-unlock-close-btn" title="${this._t("common.close", "Close")}">&#10005;</button><h2>&#128274; ${this._t("privacy.unlock_title", "Turn off Privacy Mode")}</h2><div class="fh-privacy-unlock-msg">${message}</div><div class="fh-privacy-unlock-actions"><button type="button" class="fh-privacy-unlock-cancel-btn fh-privacy-unlock-close-btn">${this._t("common.close", "Close")}</button></div>`;
+box.innerHTML = `<button type="button" class="fh-privacy-unlock-close-btn" title="${this._t("common.close", "Close")}">&#10005;</button><h2>&#128274; ${this._t("privacy.unlock_title", "Turn off Privacy Mode")}</h2><div class="fh-privacy-unlock-msg">${__fhEsc(message)}</div><div class="fh-privacy-unlock-actions"><button type="button" class="fh-privacy-unlock-cancel-btn fh-privacy-unlock-close-btn">${this._t("common.close", "Close")}</button></div>`;
 box.querySelectorAll(".fh-privacy-unlock-close-btn").forEach((btn) => btn.addEventListener("click", () => this._closePrivacyModeUnlock()));
 }
 // Generic "incorrect_pin" error on any failure - same anti-fishing shape
@@ -8337,10 +8423,10 @@ this._renderDeviceSettingsList();
 this._renderDeviceSettingsPresets();
 }
 _deviceSettingsControlHtml(deviceId, key, field, value, instanceId) {
-const controlId = `dsf-${deviceId}-${instanceId || "d"}-${key}`;
+const controlId = `dsf-${__fhEsc(deviceId)}-${__fhEsc(instanceId || "d")}-${__fhEsc(key)}`;
 if (field.type === "enum") {
-const options = field.choices.map((c) => `<option value="${c}"${c === value ? " selected" : ""}>${c}</option>`).join("");
-return `<select class="device-settings-field-input" data-key="${key}" id="${controlId}">${options}</select>`;
+const options = field.choices.map((c) => `<option value="${__fhEsc(c)}"${c === value ? " selected" : ""}>${__fhEsc(c)}</option>`).join("");
+return `<select class="device-settings-field-input" data-key="${__fhEsc(key)}" id="${controlId}">${options}</select>`;
 }
 if (field.type === "text") {
 // Unlike device_name elsewhere in this same list (text content in a
@@ -8349,10 +8435,10 @@ if (field.type === "text") {
 // value sits inside a double-quoted HTML attribute, where an
 // unescaped `"` could break out of it - cheap enough to escape
 // properly rather than lean on the same "trusted surface" reasoning.
-const escaped = String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-return `<input type="text" class="device-settings-field-input device-settings-field-input-text" data-key="${key}" id="${controlId}" maxlength="${field.max_length}" placeholder="${this._t("settings.device_name_placeholder", "auto")}" value="${escaped}" />`;
+const escaped = String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+return `<input type="text" class="device-settings-field-input device-settings-field-input-text" data-key="${__fhEsc(key)}" id="${controlId}" maxlength="${__fhEsc(field.max_length)}" placeholder="${this._t("settings.device_name_placeholder", "auto")}" value="${escaped}" />`;
 }
-return `<input type="number" class="device-settings-field-input" data-key="${key}" id="${controlId}" min="${field.min}" max="${field.max}" step="1" value="${value}" />`;
+return `<input type="number" class="device-settings-field-input" data-key="${__fhEsc(key)}" id="${controlId}" min="${__fhEsc(field.min)}" max="${__fhEsc(field.max)}" step="1" value="${__fhEsc(value)}" />`;
 }
 // Splits the "fields" registry the backend sent back (device_settings/
 // list's own authoritative copy - see this file's own comment on
@@ -8401,7 +8487,7 @@ const rowsHtml = Object.keys(deviceFields)
 .map((key) => {
 const field = deviceFields[key];
 const value = settings[key] !== undefined ? settings[key] : field.default;
-return `<div class="device-settings-field-row"><label>${field.label || key}</label>${this._deviceSettingsControlHtml(deviceId, key, field, value)}</div>`;
+return `<div class="device-settings-field-row"><label>${(field.label ? __fhEsc(field.label) : key)}</label>${this._deviceSettingsControlHtml(deviceId, key, field, value)}</div>`;
 })
 .join("");
 const isMe = deviceId === myId ? ` <span class="device-settings-you-tag">${this._t("settings.devices_this_device", "this device")}</span>` : "";
@@ -8439,41 +8525,41 @@ const instanceRowsHtml = Object.keys(instanceFields)
 .map((key) => {
 const field = instanceFields[key];
 const value = instanceSettings[key] !== undefined ? instanceSettings[key] : field.default;
-return `<div class="device-settings-field-row"><label>${field.label || key}</label>${this._deviceSettingsControlHtml(deviceId, key, field, value, instanceId)}</div>`;
+return `<div class="device-settings-field-row"><label>${(field.label ? __fhEsc(field.label) : key)}</label>${this._deviceSettingsControlHtml(deviceId, key, field, value, instanceId)}</div>`;
 })
 .join("");
 const instanceLabel = instanceRecord.instance_label || instanceId;
 const instanceIsMe = deviceId === myId && instanceId === myInstanceId ? ` <span class="device-settings-you-tag">${this._t("settings.devices_this_device", "this device")}</span>` : "";
 const instanceLastSeen = instanceRecord.last_seen ? this._fmtDateTime(new Date(instanceRecord.last_seen)) : this._t("settings.devices_never_reported", "never reported settings");
-return `<div class="device-settings-instance-row" data-device-id="${deviceId}" data-instance-id="${instanceId}">
-<div class="device-settings-instance-header"><span class="device-settings-instance-label" title="${instanceId}">${instanceLabel}</span>${instanceIsMe}<span class="device-settings-last-seen">${instanceLastSeen}</span></div>
+return `<div class="device-settings-instance-row" data-device-id="${__fhEsc(deviceId)}" data-instance-id="${__fhEsc(instanceId)}">
+<div class="device-settings-instance-header"><span class="device-settings-instance-label" title="${__fhEsc(instanceId)}">${__fhEsc(instanceLabel)}</span>${instanceIsMe}<span class="device-settings-last-seen">${instanceLastSeen}</span></div>
 <div class="device-settings-instance-fields">${instanceRowsHtml}</div>
 <div class="device-settings-instance-actions">
-<button type="button" class="btn-save device-settings-instance-push-btn" data-device-id="${deviceId}" data-instance-id="${instanceId}">${this._t("settings.devices_push", "Push to this device")}</button>
+<button type="button" class="btn-save device-settings-instance-push-btn" data-device-id="${__fhEsc(deviceId)}" data-instance-id="${__fhEsc(instanceId)}">${this._t("settings.devices_push", "Push to this device")}</button>
 <input type="text" class="device-settings-preset-name-input" placeholder="${this._t("settings.devices_preset_name_placeholder", "Preset name")}" />
-<button type="button" class="btn-cancel device-settings-instance-save-preset-btn" data-device-id="${deviceId}" data-instance-id="${instanceId}">${this._t("settings.devices_save_as_preset", "Save as preset")}</button>
+<button type="button" class="btn-cancel device-settings-instance-save-preset-btn" data-device-id="${__fhEsc(deviceId)}" data-instance-id="${__fhEsc(instanceId)}">${this._t("settings.devices_save_as_preset", "Save as preset")}</button>
 </div>
 </div>`;
 })
 .join("")
 : `<div class="device-settings-instance-empty">${this._t("settings.devices_no_instances", "No dashboards/views have reported yet")}</div>`;
-return `<div class="device-settings-card${isExpanded ? " expanded" : ""}" data-device-id="${deviceId}">
+return `<div class="device-settings-card${isExpanded ? " expanded" : ""}" data-device-id="${__fhEsc(deviceId)}">
 <div class="device-settings-card-header">
-<button type="button" class="device-settings-card-toggle" data-device-id="${deviceId}" aria-expanded="${isExpanded}">
+<button type="button" class="device-settings-card-toggle" data-device-id="${__fhEsc(deviceId)}" aria-expanded="${isExpanded}">
 <span class="device-settings-card-toggle-chevron" aria-hidden="true">›</span>
-<span class="device-settings-id" title="${deviceId}">${label}</span>
+<span class="device-settings-id" title="${__fhEsc(deviceId)}">${__fhEsc(label)}</span>
 </button>
 ${isMe}<span class="device-settings-last-seen">${lastSeen}</span>
 </div>
 <div class="device-settings-card-body">
 <div class="device-settings-fields">${rowsHtml}</div>
 <div class="device-settings-card-actions">
-<label class="remind-check-opt device-settings-screensaver-opt" title="${this._t("settings.devices_screensaver_hint", "Takes effect immediately - no Push needed. Automations can also control this via the device's screensaver switch entity.")}"><input type="checkbox" class="device-settings-screensaver-check" data-device-id="${deviceId}" ${screenSaverEnabled ? "checked" : ""} /> <span>${this._t("settings.devices_screensaver_label", "Screensaver enabled")}</span></label>
-<label class="remind-check-opt device-settings-privacy-participates-opt" title="${this._t("settings.devices_privacy_participates_hint", "Takes effect immediately - no Push needed. Uncheck so this device keeps showing the calendar while Privacy Mode hides it everywhere else - for example a phone that should stay visible while the kitchen kiosk goes private.")}"><input type="checkbox" class="device-settings-privacy-participates-check" data-device-id="${deviceId}" ${privacyParticipates ? "checked" : ""} /> <span>${this._t("settings.devices_privacy_participates_label", "Participates in Privacy Mode")}</span></label>
-<button type="button" class="btn-save device-settings-push-btn" data-device-id="${deviceId}">${this._t("settings.devices_push", "Push to this device")}</button>
-<button type="button" class="btn-cancel device-settings-identify-btn" data-device-id="${deviceId}">${this._t("settings.devices_identify", "Identify")}</button>
+<label class="remind-check-opt device-settings-screensaver-opt" title="${this._t("settings.devices_screensaver_hint", "Takes effect immediately - no Push needed. Automations can also control this via the device's screensaver switch entity.")}"><input type="checkbox" class="device-settings-screensaver-check" data-device-id="${__fhEsc(deviceId)}" ${screenSaverEnabled ? "checked" : ""} /> <span>${this._t("settings.devices_screensaver_label", "Screensaver enabled")}</span></label>
+<label class="remind-check-opt device-settings-privacy-participates-opt" title="${this._t("settings.devices_privacy_participates_hint", "Takes effect immediately - no Push needed. Uncheck so this device keeps showing the calendar while Privacy Mode hides it everywhere else - for example a phone that should stay visible while the kitchen kiosk goes private.")}"><input type="checkbox" class="device-settings-privacy-participates-check" data-device-id="${__fhEsc(deviceId)}" ${privacyParticipates ? "checked" : ""} /> <span>${this._t("settings.devices_privacy_participates_label", "Participates in Privacy Mode")}</span></label>
+<button type="button" class="btn-save device-settings-push-btn" data-device-id="${__fhEsc(deviceId)}">${this._t("settings.devices_push", "Push to this device")}</button>
+<button type="button" class="btn-cancel device-settings-identify-btn" data-device-id="${__fhEsc(deviceId)}">${this._t("settings.devices_identify", "Identify")}</button>
 <input type="text" class="device-settings-preset-name-input" placeholder="${this._t("settings.devices_preset_name_placeholder", "Preset name")}" />
-<button type="button" class="btn-cancel device-settings-save-preset-btn" data-device-id="${deviceId}">${this._t("settings.devices_save_as_preset", "Save as preset")}</button>
+<button type="button" class="btn-cancel device-settings-save-preset-btn" data-device-id="${__fhEsc(deviceId)}">${this._t("settings.devices_save_as_preset", "Save as preset")}</button>
 </div>
 <div class="device-settings-instances">
 <div class="device-settings-instances-label">${this._t("settings.devices_dashboards_label", "Dashboards/views on this device")}</div>
@@ -8749,11 +8835,11 @@ const deviceOptions = Object.keys(devices)
 .map((id) => {
 const record = devices[id] || {};
 const deviceLabel = this._deviceLabel(record.device_name, id);
-const ownOption = `<option value="${id}">${deviceLabel}</option>`;
+const ownOption = `<option value="${__fhEsc(id)}">${__fhEsc(deviceLabel)}</option>`;
 const instanceOptions = Object.keys(record.instances || {})
 .map((instanceId) => {
 const instanceLabel = (record.instances[instanceId] || {}).instance_label || instanceId;
-return `<option value="${id}::${instanceId}">${deviceLabel} → ${instanceLabel}</option>`;
+return `<option value="${__fhEsc(id)}::${__fhEsc(instanceId)}">${__fhEsc(deviceLabel)} → ${__fhEsc(instanceLabel)}</option>`;
 })
 .join("");
 return ownOption + instanceOptions;
@@ -8762,11 +8848,11 @@ return ownOption + instanceOptions;
 listEl.innerHTML = presetIds
 .map((presetId) => {
 const preset = presets[presetId];
-return `<div class="device-settings-preset-row" data-preset-id="${presetId}">
-<span class="device-settings-preset-name">${preset.name}</span>
+return `<div class="device-settings-preset-row" data-preset-id="${__fhEsc(presetId)}">
+<span class="device-settings-preset-name">${__fhEsc(preset.name)}</span>
 <select class="device-settings-preset-target-select">${deviceOptions}</select>
-<button type="button" class="btn-save device-settings-apply-preset-btn" data-preset-id="${presetId}">${this._t("settings.devices_apply", "Apply")}</button>
-<button type="button" class="btn-cancel device-settings-delete-preset-btn" data-preset-id="${presetId}">${this._t("chores.remove", "Remove")}</button>
+<button type="button" class="btn-save device-settings-apply-preset-btn" data-preset-id="${__fhEsc(presetId)}">${this._t("settings.devices_apply", "Apply")}</button>
+<button type="button" class="btn-cancel device-settings-delete-preset-btn" data-preset-id="${__fhEsc(presetId)}">${this._t("chores.remove", "Remove")}</button>
 </div>`;
 })
 .join("");
@@ -9041,7 +9127,7 @@ container.innerHTML = people
 .map(
 (p) => `
 <label class="right-now-topbar-person-row">
-<input type="checkbox" class="right-now-topbar-person-checkbox" data-entity="${p.entity}" ${excluded.has(p.entity) ? "" : "checked"} />
+<input type="checkbox" class="right-now-topbar-person-checkbox" data-entity="${__fhEsc(p.entity)}" ${excluded.has(p.entity) ? "" : "checked"} />
 <span>${(p.name || p.entity).toString().replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>
 </label>`
 )
@@ -9943,7 +10029,7 @@ async _renderMoreMenuUnifiStatus(form) {
 const box = form && form.querySelector(".mm-unifi-status");
 if (!box || !this._unifiInUse()) return;
 const forType = box.dataset.for;
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const t = (k, fb) => esc(this._t(k, fb));
 const ready = this._moreMenuQrImageEntities().filter((e) => e.qr).length > 0;
 if (forType === "wifi" && ready) {
@@ -10095,7 +10181,7 @@ return first.slice(0, 32);
 // emoji/character; the 📌 default when there's none.
 _moreMenuIconHtml(icon) {
 const v = icon || "\u{1F4CC}";
-const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 if (/^mdi:[a-z0-9-]+$/.test(v)) return `<ha-icon class="mm-ha-icon" icon="${esc(v)}"></ha-icon>`;
 return `<span class="mm-emoji-icon">${esc(v)}</span>`;
 }
@@ -10849,7 +10935,7 @@ for (let w = 0; w <= 6; w += 1) {
 const names = weekdayBlocks[String(w)];
 if (!names || !names.length) continue;
 rows.push(
-`<div class="mb-extra-row"><div class="mb-extra-day">${this._t("settings.menu_block_every_weekday", "Every %day%", { day: dayNames[w] })}</div><div class="mb-extra-chips">${chipsFor(names, "weekday", String(w))}</div></div>`
+`<div class="mb-extra-row"><div class="mb-extra-day">${this._t("settings.menu_block_every_weekday", "Every %day%", { day: __fhEsc(dayNames[w]) })}</div><div class="mb-extra-chips">${chipsFor(names, "weekday", String(w))}</div></div>`
 );
 }
 Object.keys(dateBlocks)
@@ -11953,16 +12039,16 @@ const profile = this._settingsUserProfilesDraft[u.id] || this._defaultUserProfil
 // else, removing them) isn't part of the non-admin whitelist above, so
 // the ✕ only renders for an admin - a non-admin's own row is Edit-only.
 const removeBtnHtml = isAdminUser
-? `<button data-fh-title="text.remove_from_family_hub" type="button" class="notify-profile-row-remove-btn" data-user-id="${u.id}" title="${__fhT("text.remove_from_family_hub", "Remove from Family Hub", null, "h")}">&#10005;</button>`
+? `<button data-fh-title="text.remove_from_family_hub" type="button" class="notify-profile-row-remove-btn" data-user-id="${__fhEsc(u.id)}" title="${__fhT("text.remove_from_family_hub", "Remove from Family Hub", null, "h")}">&#10005;</button>`
 : "";
 return `
-<div class="notify-profile-row" data-user-id="${u.id}">
+<div class="notify-profile-row" data-user-id="${__fhEsc(u.id)}">
 <div>
-<div class="notify-profile-row-name">${u.name}${u.id === currentUserId ? __fhT("text.this_login", " (this login)", null, "h") : ""}</div>
+<div class="notify-profile-row-name">${__fhEsc(u.name)}${u.id === currentUserId ? __fhT("text.this_login", " (this login)", null, "h") : ""}</div>
 <div class="notify-profile-row-summary">${this._userProfileSummaryText(profile)}</div>
 </div>
 <div class="notify-profile-row-actions">
-<button data-fh-t="text.edit" type="button" class="notify-profile-row-edit-btn" data-user-id="${u.id}">${__fhT("text.edit", "Edit", null, "h")}</button>
+<button data-fh-t="text.edit" type="button" class="notify-profile-row-edit-btn" data-user-id="${__fhEsc(u.id)}">${__fhT("text.edit", "Edit", null, "h")}</button>
 ${removeBtnHtml}
 </div>
 </div>
@@ -11990,7 +12076,7 @@ const users = this._notifyProfileUsersCache;
 const memberIds = Array.isArray(this._settingsMemberIdsDraft) ? this._settingsMemberIdsDraft : [];
 const available = Array.isArray(users) ? users.filter((u) => !memberIds.includes(u.id)) : [];
 if (available.length) {
-addSelect.innerHTML = available.map((u) => `<option value="${u.id}">${u.name}</option>`).join("");
+addSelect.innerHTML = available.map((u) => `<option value="${__fhEsc(u.id)}">${__fhEsc(u.name)}</option>`).join("");
 addSelect.disabled = false;
 addBtn.disabled = false;
 } else {
@@ -12203,10 +12289,10 @@ const opts = defs
 .filter((d) => d.group === group)
 .map(
 (d) =>
-`<label class="perm-opt" title="${d.hint}"><input type="checkbox" class="perm-check" data-user="${userId}" data-key="${d.key}" ${entry[d.key] ? "checked" : ""} /><span>${d.label}</span></label>`
+`<label class="perm-opt" title="${__fhEsc(d.hint)}"><input type="checkbox" class="perm-check" data-user="${__fhEsc(userId)}" data-key="${__fhEsc(d.key)}" ${entry[d.key] ? "checked" : ""} /><span>${__fhEsc(d.label)}</span></label>`
 )
 .join("");
-return `<div class="perm-group"><div class="perm-group-name">${group}</div><div class="perm-group-opts">${opts}</div></div>`;
+return `<div class="perm-group"><div class="perm-group-name">${__fhEsc(group)}</div><div class="perm-group-opts">${opts}</div></div>`;
 })
 .join("");
 listEl.querySelectorAll(".perm-check").forEach((check) => {
@@ -12258,20 +12344,20 @@ calEl.innerHTML = calendars.length
 ? calendars
 .map(
 (c) =>
-`<div class="notify-debug-row${c.monitored ? "" : " notify-debug-row-warn"}"><span class="notify-debug-row-main">${c.name}</span>${c.monitored ? "" : ('<span data-fh-title="text.not_watched_for_reminders_yet_saving" data-fh-t="text.not_monitored" class="notify-debug-row-flag" title="' + __fhT("text.not_watched_for_reminders_yet_saving", "Not watched for reminders yet - saving Settings adds it automatically.", null, "h") + '">' + __fhT("text.not_monitored", "⚠ not monitored", null, "h") + '</span>')}</div>`
+`<div class="notify-debug-row${c.monitored ? "" : " notify-debug-row-warn"}"><span class="notify-debug-row-main">${__fhEsc(c.name)}</span>${c.monitored ? "" : ('<span data-fh-title="text.not_watched_for_reminders_yet_saving" data-fh-t="text.not_monitored" class="notify-debug-row-flag" title="' + __fhT("text.not_watched_for_reminders_yet_saving", "Not watched for reminders yet - saving Settings adds it automatically.", null, "h") + '">' + __fhT("text.not_monitored", "⚠ not monitored", null, "h") + '</span>')}</div>`
 )
 .join("")
 : `<div data-fh-t="text.not_subscribed_to_any_calendar" class="notify-profiles-empty-state">${__fhT("text.not_subscribed_to_any_calendar", "Not subscribed to any calendar.", null, "h")}</div>`;
 const targets = Array.isArray(data.notifyTargets) ? data.notifyTargets : [];
 devEl.innerHTML = targets.length
-? targets.map((t) => `<div class="notify-debug-row"><span class="notify-debug-row-main">${t}</span></div>`).join("")
+? targets.map((t) => `<div class="notify-debug-row"><span class="notify-debug-row-main">${__fhEsc(t)}</span></div>`).join("")
 : `<div data-fh-t="text.no_notify_targets_set_nothing_can_reach" class="notify-profiles-empty-state">${__fhT("text.no_notify_targets_set_nothing_can_reach", "No notify targets set - nothing can reach this person even if they're subscribed.", null, "h")}</div>`;
 const pending = Array.isArray(data.pending) ? data.pending : [];
 pendEl.innerHTML = pending.length
 ? pending
 .map(
 (p) =>
-`<div class="notify-debug-row"><span class="notify-debug-row-main">${p.when} - "${p.summary}" (${p.calendar})</span><span class="notify-debug-row-status notify-debug-row-status-${p.status}">${p.status}</span></div>`
+`<div class="notify-debug-row"><span class="notify-debug-row-main">${__fhEsc(p.when)} - "${__fhEsc(p.summary)}" (${__fhEsc(p.calendar)})</span><span class="notify-debug-row-status notify-debug-row-status-${__fhEsc(p.status)}">${__fhEsc(p.status)}</span></div>`
 )
 .join("") + (data.pendingTotal > pending.length ? `<div class="remind-hint">...and ${data.pendingTotal - pending.length} more.</div>` : "")
 : `<div class="notify-profiles-empty-state">${__fhT("text.nothing_pending_in_the_next_x_hours", "Nothing pending in the next %0% hours.", {0: 7 * 24}, "h")}</div>`;
@@ -12379,7 +12465,7 @@ if (listEl) {
 // v1.168.74: each speaker says who it rings for - people (their own
 // timers, chores and rewards) and/or "House timers" (timers with nobody
 // assigned, like the oven) - plus a Test button.
-const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const memberIds = Array.isArray(this._settingsMemberIdsDraft) ? this._settingsMemberIdsDraft : [];
 const people = Array.isArray(this._notifyProfileUsersCache) ? this._notifyProfileUsersCache.filter((u) => memberIds.includes(u.id)) : [];
 listEl.innerHTML = draft.length
@@ -12485,8 +12571,8 @@ if (candidatesEl) {
     ? remaining
         .map(
           (c) =>
-            `<button type="button" class="alarm-device-candidate-btn" data-entity-id="${c.entity_id}" data-domain="${c.domain}" data-name="${c.name}">` +
-            `${c.name} <span class="alarm-device-row-domain">(${c.domain === "assist_satellite" ? __fhT("text.assist_satellite", "Assist satellite", null, "h") : __fhT("text.speaker", "Speaker", null, "h")})</span>` +
+            `<button type="button" class="alarm-device-candidate-btn" data-entity-id="${__fhEsc(c.entity_id)}" data-domain="${__fhEsc(c.domain)}" data-name="${__fhEsc(c.name)}">` +
+            `${__fhEsc(c.name)} <span class="alarm-device-row-domain">(${c.domain === "assist_satellite" ? __fhT("text.assist_satellite", "Assist satellite", null, "h") : __fhT("text.speaker", "Speaker", null, "h")})</span>` +
             `</button>`
         )
         .join("")
@@ -12517,7 +12603,7 @@ if (candidatesEl) {
 if (ttsSelect && ttsSelect.dataset.populated !== "true") {
   ttsSelect.dataset.populated = "true";
   const ttsOptions = (candidates.tts_entities || [])
-    .map((c) => `<option value="${c.entity_id}">${c.name}</option>`)
+    .map((c) => `<option value="${__fhEsc(c.entity_id)}">${__fhEsc(c.name)}</option>`)
     .join("");
   ttsSelect.innerHTML = `<option data-fh-t="text.not_set" value="">${__fhT("text.not_set", "Not set", null, "h")}</option>${ttsOptions}`;
   ttsSelect.value = this._settingsAlarmTtsEntityDraft || "";
@@ -17629,7 +17715,7 @@ return name;
 // hand-written config) is kept as its own option so it's never silently
 // dropped from the row on the next Save.
 _calendarEntityOptionsHtml(current, list, idx) {
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const used = new Set((Array.isArray(list) ? list : []).filter((p, i) => i !== idx && p && p.entity).map((p) => p.entity));
 const states = (this._hass && this._hass.states) || {};
 const entities = Object.keys(states)
@@ -17724,7 +17810,7 @@ const row = swatch.closest(".person-row");
 const entitySel = row && row.querySelector(".person-entity");
 const entity = entitySel ? entitySel.value : "";
 const ha = this._haCalendarColor(entity);
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const menu = document.createElement("div");
 menu.className = "person-color-pop";
 menu.innerHTML =
@@ -17822,19 +17908,19 @@ const primaryTagTitle = this._t("settings.calendar_tag_primary_title", "Primary 
 // already use for color/badges/reminders on this exact entity.
 const rowHtml = (p, idx, ownerUid, secondaryOwnerUid) => {
 const starBtn = ownerUid
-? `<button type="button" class="person-link-star-btn is-primary" data-idx="${idx}" data-uid="${ownerUid}" title="${primaryTagTitle.replace("%name%", memberNamesById[ownerUid] || ownerUid)}">★</button>`
+? `<button type="button" class="person-link-star-btn is-primary" data-idx="${idx}" data-uid="${__fhEsc(ownerUid)}" title="${primaryTagTitle.replace("%name%", memberNamesById[ownerUid] || ownerUid)}">★</button>`
 : secondaryOwnerUid
-? `<button type="button" class="person-link-star-btn is-secondary" data-idx="${idx}" data-uid="${secondaryOwnerUid}" title="${secondaryLinkTagTitle}">☆</button>`
+? `<button type="button" class="person-link-star-btn is-secondary" data-idx="${idx}" data-uid="${__fhEsc(secondaryOwnerUid)}" title="${secondaryLinkTagTitle}">☆</button>`
 : "";
 return `
 <div class="person-row" data-idx="${idx}">
-<select class="person-entity" data-idx="${idx}" data-prev-entity="${p.entity || ""}" title="${p.entity || ""}">${this._calendarEntityOptionsHtml(p.entity || "", list, idx)}</select>
-<input data-fh-placeholder="text.name" type="text" class="person-name" placeholder="${__fhT("text.name", "Name", null, "h")}" value="${p.name || ""}" maxlength="20" />
+<select class="person-entity" data-idx="${idx}" data-prev-entity="${__fhEsc(p.entity || "")}" title="${p.entity || ""}">${this._calendarEntityOptionsHtml(p.entity || "", list, idx)}</select>
+<input data-fh-placeholder="text.name" type="text" class="person-name" placeholder="${__fhT("text.name", "Name", null, "h")}" value="${__fhEsc(p.name || "")}" maxlength="20" />
 ${starBtn}
-<span class="person-color-wrap"><button type="button" class="person-color-swatch" data-idx="${idx}" style="background:${p.color || "#d9bf7e"}" title="${this._t("settings.calendar_color_title", "Color")}" aria-label="${this._t("settings.calendar_color_title", "Color")}"></button><input type="color" class="person-color" data-idx="${idx}" value="${p.color || "#d9bf7e"}" tabindex="-1" aria-hidden="true" /></span>
+<span class="person-color-wrap"><button type="button" class="person-color-swatch" data-idx="${idx}" style="background:${__fhEsc(p.color || "#d9bf7e")}" title="${this._t("settings.calendar_color_title", "Color")}" aria-label="${this._t("settings.calendar_color_title", "Color")}"></button><input type="color" class="person-color" data-idx="${idx}" value="${p.color || "#d9bf7e"}" tabindex="-1" aria-hidden="true" /></span>
 <select class="person-linked-user-select" data-idx="${idx}" title="${linkedUserSelectTitle}">
 <option value="" ${!ownerUid && !secondaryOwnerUid ? "selected" : ""}>${notLinkedOptionLabel}</option>
-${memberIds.map((uid) => `<option value="${uid}" ${uid === ownerUid || uid === secondaryOwnerUid ? "selected" : ""}>${memberNamesById[uid] || uid}</option>`).join("")}
+${memberIds.map((uid) => `<option value="${__fhEsc(uid)}" ${uid === ownerUid || uid === secondaryOwnerUid ? "selected" : ""}>${(memberNamesById[uid] ? __fhEsc(memberNamesById[uid]) : uid)}</option>`).join("")}
 </select>
 <button data-fh-title="text.include_in_countdown" type="button" class="person-countdown-btn ${p.countdown ? "active" : ""}" data-idx="${idx}" title="${__fhT("text.include_in_countdown", "Include in countdown", null, "h")}">&#9203;</button>
 <button data-fh-title="text.remove" type="button" class="person-remove-btn" data-idx="${idx}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
@@ -17843,14 +17929,14 @@ ${memberIds.map((uid) => `<option value="${uid}" ${uid === ownerUid || uid === s
 ${(p.badges || [])
 .map(
 (b, bidx) => `
-<div class="person-badge-row" data-idx="${idx}" data-badge-idx="${bidx}">
-<input data-fh-placeholder="text.badge_e_g_n" type="text" class="person-badge-text" placeholder="${__fhT("text.badge_e_g_n", "Badge (e.g. N)", null, "h")}" value="${b.text || ""}" maxlength="4" />
-<input data-fh-placeholder="text.show_badge_when_event_contains" type="text" class="person-badge-match" placeholder="${__fhT("text.show_badge_when_event_contains", "Show badge when event contains...", null, "h")}" value="${b.match || ""}" />
-<input data-fh-placeholder="text.hide_event_when_contains" type="text" class="person-badge-hide" placeholder="${__fhT("text.hide_event_when_contains", "Hide event when contains...", null, "h")}" value="${b.hideMatch || ""}" />
+<div class="person-badge-row" data-idx="${idx}" data-badge-idx="${__fhEsc(bidx)}">
+<input data-fh-placeholder="text.badge_e_g_n" type="text" class="person-badge-text" placeholder="${__fhT("text.badge_e_g_n", "Badge (e.g. N)", null, "h")}" value="${__fhEsc(b.text || "")}" maxlength="4" />
+<input data-fh-placeholder="text.show_badge_when_event_contains" type="text" class="person-badge-match" placeholder="${__fhT("text.show_badge_when_event_contains", "Show badge when event contains...", null, "h")}" value="${__fhEsc(b.match || "")}" />
+<input data-fh-placeholder="text.hide_event_when_contains" type="text" class="person-badge-hide" placeholder="${__fhT("text.hide_event_when_contains", "Hide event when contains...", null, "h")}" value="${__fhEsc(b.hideMatch || "")}" />
 <label data-fh-title="text.hide_any_matching_event_from_the_daily" class="person-badge-digest-label" title="${__fhT("text.hide_any_matching_event_from_the_daily", "Hide any matching event from the Daily Digest too", null, "h")}">
 <input type="checkbox" class="person-badge-digest-hide" ${b.digestHide ? "checked" : ""} /> ${__fhT("text.hide_from_digest", "Hide from digest", null, "h")}
 </label>
-<button data-fh-title="text.remove_badge" type="button" class="person-badge-remove-btn" data-idx="${idx}" data-badge-idx="${bidx}" title="${__fhT("text.remove_badge", "Remove badge", null, "h")}">&#10005;</button>
+<button data-fh-title="text.remove_badge" type="button" class="person-badge-remove-btn" data-idx="${idx}" data-badge-idx="${__fhEsc(bidx)}" title="${__fhT("text.remove_badge", "Remove badge", null, "h")}">&#10005;</button>
 </div>
 `
 )
@@ -18101,7 +18187,7 @@ _holidayBackgroundDateLabel(def) {
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 if (def.key === "thanksgiving") return this._t("settings.holiday_thanksgiving_date", "4th Thursday of November");
 if (def.key === "easter") return this._t("settings.holiday_easter_date", "varies - computed each year");
-return `${monthNames[def.month - 1]} ${def.day}`;
+return `${__fhEsc(monthNames[def.month - 1])} ${__fhEsc(def.day)}`;
 }
 // Builds the Holidays and Custom dates lists under Settings > General >
 // Holiday Backgrounds (see HOLIDAY_PREDEFINED_DEFS, _normalizeHoliday-
@@ -18121,7 +18207,7 @@ const rowHtml = (entry, idx) => {
 const isPredefined = entry.source === "predefined";
 const def = isPredefined ? HOLIDAY_PREDEFINED_DEFS.find((d) => d.key === entry.predefinedKey) : null;
 const dateLabel = def ? this._holidayBackgroundDateLabel(def) : "";
-const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 // A predefined row's name translates through settings.holiday_predefined_<key>
 // as long as it's still exactly this def's own English default (i.e. no
 // admin has renamed it yet) - once renamed, that's now a household's own
@@ -18133,10 +18219,10 @@ const nameField = isPredefined
 const dateRow = isPredefined
 ? ""
 : `<div class="holiday-bg-date-row">
-<input type="number" class="holiday-bg-month" data-idx="${idx}" min="1" max="12" value="${entry.month}" placeholder="MM" />
-<input type="number" class="holiday-bg-day" data-idx="${idx}" min="1" max="31" value="${entry.day}" placeholder="DD" />
+<input type="number" class="holiday-bg-month" data-idx="${idx}" min="1" max="12" value="${__fhEsc(entry.month)}" placeholder="MM" />
+<input type="number" class="holiday-bg-day" data-idx="${idx}" min="1" max="31" value="${__fhEsc(entry.day)}" placeholder="DD" />
 <label class="holiday-bg-recurring-label"><input type="checkbox" class="holiday-bg-recurring" data-idx="${idx}" ${entry.recurring ? "checked" : ""} /> <span data-i18n="settings.holiday_every_year">Every year</span></label>
-${!entry.recurring ? `<input type="number" class="holiday-bg-year" data-idx="${idx}" min="2000" max="2100" value="${entry.year || new Date().getFullYear()}" placeholder="YYYY" />` : ""}
+${!entry.recurring ? `<input type="number" class="holiday-bg-year" data-idx="${idx}" min="2000" max="2100" value="${(entry.year ? __fhEsc(entry.year) : new Date().getFullYear())}" placeholder="YYYY" />` : ""}
 </div>`;
 return `
 <div class="holiday-bg-row" data-idx="${idx}">
@@ -18427,9 +18513,9 @@ if (notifyList.length) {
 listEl.innerHTML = notifyList
 .map(
 (t, di) => `
-<div class="notify-device-row" data-di="${di}">
-<span class="notify-device-name">${t}</span>
-<button data-fh-title="text.remove" type="button" class="notify-device-remove-btn" data-di="${di}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
+<div class="notify-device-row" data-di="${__fhEsc(di)}">
+<span class="notify-device-name">${__fhEsc(t)}</span>
+<button data-fh-title="text.remove" type="button" class="notify-device-remove-btn" data-di="${__fhEsc(di)}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
 </div>
 `
 )
@@ -18451,7 +18537,7 @@ const available = options.filter((opt) => !notifyList.includes(opt));
 const addSelect = root.querySelector(".notify-devices-add-select");
 const addBtn = root.querySelector(".notify-devices-add-btn");
 if (available.length) {
-addSelect.innerHTML = available.map((opt) => `<option value="${opt}">${opt}</option>`).join("");
+addSelect.innerHTML = available.map((opt) => `<option value="${__fhEsc(opt)}">${__fhEsc(opt)}</option>`).join("");
 addSelect.disabled = false;
 addBtn.disabled = false;
 } else {
@@ -18609,7 +18695,7 @@ const presenceDatalistEl = root.querySelector("#notify-profile-presence-datalist
 if (presenceDatalistEl) {
 presenceDatalistEl.innerHTML = this._entitiesForDomain("person")
 .concat(this._entitiesForDomain("device_tracker"))
-.map((e) => `<option value="${e.id}">${e.name}</option>`)
+.map((e) => `<option value="${__fhEsc(e.id)}">${__fhEsc(e.name)}</option>`)
 .join("");
 }
 const targetsCountEl = root.querySelector(".notify-profile-targets-count");
@@ -18911,7 +18997,7 @@ _renderNotifyProfileCalendarSummary(userId) {
 const el = this._root && this._root.querySelector(".notify-profile-calendar-summary");
 if (!el) return;
 const profile = (this._settingsUserProfilesDraft || {})[userId] || {};
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const nameOf = (entity) => this._calendarSummaryName(entity);
 if (!profile.primaryCalendar) {
 el.innerHTML = `<div class="notify-profile-calendar-summary-empty">${esc(this._t("settings.no_calendar_column", "No calendar of their own yet."))}</div>`;
@@ -19002,10 +19088,10 @@ const rowsHtml = group.entities.map(entityCard).join("");
 return `
 <div class="notify-profile-calendar-owner-group">
 <div class="notify-profile-calendar-owner-header">
-<button type="button" class="notify-profile-calendar-owner-name${allSubscribed ? " all-subscribed" : ""}" data-group-idx="${gidx}" title="${__fhT("text.subscribe_to_all_of_x_s_calendars", "Subscribe to all of %0%'s calendars", {0: group.name}, "h")}">${group.name}</button>
-<button data-fh-title="text.show_their_calendars" type="button" class="notify-profile-calendar-owner-expand-btn" data-group-idx="${gidx}" title="${__fhT("text.show_their_calendars", "Show their calendars", null, "h")}">&#9660;</button>
+<button type="button" class="notify-profile-calendar-owner-name${allSubscribed ? " all-subscribed" : ""}" data-group-idx="${__fhEsc(gidx)}" title="${__fhT("text.subscribe_to_all_of_x_s_calendars", "Subscribe to all of %0%'s calendars", {0: __fhEsc(group.name)}, "h")}">${__fhEsc(group.name)}</button>
+<button data-fh-title="text.show_their_calendars" type="button" class="notify-profile-calendar-owner-expand-btn" data-group-idx="${__fhEsc(gidx)}" title="${__fhT("text.show_their_calendars", "Show their calendars", null, "h")}">&#9660;</button>
 </div>
-<div class="notify-profile-calendar-owner-body" data-group-idx="${gidx}">${rowsHtml}</div>
+<div class="notify-profile-calendar-owner-body" data-group-idx="${__fhEsc(gidx)}">${rowsHtml}</div>
 </div>
 `;
 })
@@ -19150,12 +19236,12 @@ listEl.innerHTML = others
 const current = subs[c.entity] || "none";
 const color = c.color || "#d9bf7e";
 const btns = levels
-.map((lvl) => `<button type="button" class="notify-profile-reminders-sub-btn${current === lvl.value ? " active" : ""}" data-entity="${c.entity}" data-level="${lvl.value}" style="--sub-list-color:${color}">${lvl.label}</button>`)
+.map((lvl) => `<button type="button" class="notify-profile-reminders-sub-btn${current === lvl.value ? " active" : ""}" data-entity="${__fhEsc(c.entity)}" data-level="${__fhEsc(lvl.value)}" style="--sub-list-color:${color}">${__fhEsc(lvl.label)}</button>`)
 .join("");
 return `
-<div class="notify-profile-reminders-list-row" data-entity="${c.entity}">
+<div class="notify-profile-reminders-list-row" data-entity="${__fhEsc(c.entity)}">
 <span class="notify-profile-reminders-list-swatch" style="background:${color}"></span>
-<span class="notify-profile-reminders-list-name">${c.name || c.entity}</span>
+<span class="notify-profile-reminders-list-name">${(c.name ? __fhEsc(c.name) : c.entity)}</span>
 <span class="notify-profile-reminders-sub-btn-row">${btns}</span>
 </div>
 `;
@@ -19191,14 +19277,14 @@ const badges = Array.isArray(profile.badges) ? profile.badges : [];
 container.innerHTML = badges
 .map(
 (b, bidx) => `
-<div class="person-badge-row" data-badge-idx="${bidx}">
-<input data-fh-placeholder="text.badge_e_g_n" type="text" class="person-badge-text" placeholder="${__fhT("text.badge_e_g_n", "Badge (e.g. N)", null, "h")}" value="${b.text || ""}" maxlength="4" />
-<input data-fh-placeholder="text.show_badge_when_event_contains" type="text" class="person-badge-match" placeholder="${__fhT("text.show_badge_when_event_contains", "Show badge when event contains...", null, "h")}" value="${b.match || ""}" />
-<input data-fh-placeholder="text.hide_event_when_contains" type="text" class="person-badge-hide" placeholder="${__fhT("text.hide_event_when_contains", "Hide event when contains...", null, "h")}" value="${b.hideMatch || ""}" />
+<div class="person-badge-row" data-badge-idx="${__fhEsc(bidx)}">
+<input data-fh-placeholder="text.badge_e_g_n" type="text" class="person-badge-text" placeholder="${__fhT("text.badge_e_g_n", "Badge (e.g. N)", null, "h")}" value="${__fhEsc(b.text || "")}" maxlength="4" />
+<input data-fh-placeholder="text.show_badge_when_event_contains" type="text" class="person-badge-match" placeholder="${__fhT("text.show_badge_when_event_contains", "Show badge when event contains...", null, "h")}" value="${__fhEsc(b.match || "")}" />
+<input data-fh-placeholder="text.hide_event_when_contains" type="text" class="person-badge-hide" placeholder="${__fhT("text.hide_event_when_contains", "Hide event when contains...", null, "h")}" value="${__fhEsc(b.hideMatch || "")}" />
 <label data-fh-title="text.hide_any_matching_event_from_the_daily" class="person-badge-digest-label" title="${__fhT("text.hide_any_matching_event_from_the_daily", "Hide any matching event from the Daily Digest too", null, "h")}">
 <input type="checkbox" class="person-badge-digest-hide" ${b.digestHide ? "checked" : ""} /> ${__fhT("text.hide_from_digest", "Hide from digest", null, "h")}
 </label>
-<button data-fh-title="text.remove_badge" type="button" class="person-badge-remove-btn" data-badge-idx="${bidx}" title="${__fhT("text.remove_badge", "Remove badge", null, "h")}">&#10005;</button>
+<button data-fh-title="text.remove_badge" type="button" class="person-badge-remove-btn" data-badge-idx="${__fhEsc(bidx)}" title="${__fhT("text.remove_badge", "Remove badge", null, "h")}">&#10005;</button>
 </div>
 `
 )
@@ -19253,7 +19339,7 @@ container.innerHTML = entities
 .map(
 (entity, idx) => `
 <div class="notify-profile-additional-reminders-item" data-reminders-idx="${idx}">
-<input type="text" class="notify-profile-additional-reminders-entity" placeholder="todo.user_reminders_2" value="${entity || ""}" />
+<input type="text" class="notify-profile-additional-reminders-entity" placeholder="todo.user_reminders_2" value="${__fhEsc(entity || "")}" />
 <button data-fh-t="text.make_primary" data-fh-title="text.make_this_the_primary_list" type="button" class="notify-profile-additional-reminders-make-primary-btn" data-reminders-idx="${idx}" title="${__fhT("text.make_this_the_primary_list", "Make this the primary list", null, "h")}">${__fhT("text.make_primary", "★ Make primary", null, "h")}</button>
 <button data-fh-title="text.remove_this_list" type="button" class="notify-profile-additional-reminders-remove-btn" data-reminders-idx="${idx}" title="${__fhT("text.remove_this_list", "Remove this list", null, "h")}">&#10005;</button>
 </div>
@@ -19497,7 +19583,7 @@ container.innerHTML = entities
 .map(
 (entity, idx) => `
 <div class="person-extra-calendar-row" data-extra-idx="${idx}">
-<input type="text" class="person-extra-calendar-entity${entity && entity === primaryCalendar ? " is-error" : ""}" placeholder="calendar.shared_family" value="${entity || ""}" list="fh-calendar-entities-datalist" ${entity && entity === primaryCalendar ? `title="This is already this person's primary calendar - listing it again here would show its events twice. It will be removed when you Save."` : ""} />
+<input type="text" class="person-extra-calendar-entity${entity && entity === primaryCalendar ? " is-error" : ""}" placeholder="calendar.shared_family" value="${__fhEsc(entity || "")}" list="fh-calendar-entities-datalist" ${entity && entity === primaryCalendar ? `title="This is already this person's primary calendar - listing it again here would show its events twice. It will be removed when you Save."` : ""} />
 <button data-fh-title="text.remove" type="button" class="person-extra-calendar-remove-btn" data-extra-idx="${idx}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
 </div>
 `
@@ -19553,7 +19639,7 @@ container.innerHTML = entities
 .map(
 (entity, idx) => `
 <div class="person-extra-calendar-row person-extra-sensor-row" data-extra-idx="${idx}">
-<input type="text" class="person-extra-calendar-entity person-extra-sensor-entity" placeholder="sensor.alices_phone_battery" value="${entity || ""}" list="fh-sensor-entities-datalist" />
+<input type="text" class="person-extra-calendar-entity person-extra-sensor-entity" placeholder="sensor.alices_phone_battery" value="${__fhEsc(entity || "")}" list="fh-sensor-entities-datalist" />
 <button data-fh-title="text.remove" type="button" class="person-extra-calendar-remove-btn person-extra-sensor-remove-btn" data-extra-idx="${idx}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
 </div>
 `
@@ -19604,7 +19690,7 @@ el.innerHTML = this._entitiesForDomain("sensor")
 .concat(this._entitiesForDomain("binary_sensor"))
 .concat(this._entitiesForDomain("switch"))
 .concat(this._entitiesForDomain("light"))
-.map((s) => `<option value="${s.id}">${s.name}</option>`)
+.map((s) => `<option value="${__fhEsc(s.id)}">${__fhEsc(s.name)}</option>`)
 .join("");
 }
 _closeNotifyProfileModal() {
@@ -19785,7 +19871,7 @@ weatherEntityInputEl.value = settings.weatherEntity || "";
 }
 const weatherEntityDatalistEl = root.querySelector("#weather-entity-datalist");
 if (weatherEntityDatalistEl) {
-weatherEntityDatalistEl.innerHTML = this._entitiesForDomain("weather").map((e) => `<option value="${e.id}">${e.name}</option>`).join("");
+weatherEntityDatalistEl.innerHTML = this._entitiesForDomain("weather").map((e) => `<option value="${__fhEsc(e.id)}">${__fhEsc(e.name)}</option>`).join("");
 }
 root.querySelectorAll(".grey-out-past-btn").forEach((btn) => {
 btn.classList.toggle("active", btn.dataset.value === (settings.greyOutPastEvents ? "on" : "off"));
@@ -19994,7 +20080,7 @@ const cameraOptionsEl = root.querySelector("#screensaver-camera-options");
 if (cameraOptionsEl && this._hass) {
 cameraOptionsEl.innerHTML = Object.keys(this._hass.states)
 .filter((id) => id.startsWith("camera."))
-.map((id) => `<option value="${id}"></option>`)
+.map((id) => `<option value="${__fhEsc(id)}"></option>`)
 .join("");
 }
 // Permissions no longer has its own tab here - it lives in an
@@ -20150,8 +20236,8 @@ listEl.innerHTML = users
 .map(
 (u) => `
 <label class="screensaver-user-row">
-<input type="checkbox" class="screensaver-user-checkbox" data-user-id="${u.id}" ${enabled[u.id] ? "checked" : ""} />
-${u.name}${u.id === currentUserId ? __fhT("text.this_login", " (this login)", null, "h") : ""}
+<input type="checkbox" class="screensaver-user-checkbox" data-user-id="${__fhEsc(u.id)}" ${enabled[u.id] ? "checked" : ""} />
+${__fhEsc(u.name)}${u.id === currentUserId ? __fhT("text.this_login", " (this login)", null, "h") : ""}
 </label>
 `
 )
@@ -20475,7 +20561,7 @@ _refreshCalendarEntitiesDatalist() {
 const el = this._root && this._root.querySelector("#fh-calendar-entities-datalist");
 if (!el) return;
 el.innerHTML = this._entitiesForDomain("calendar")
-.map((c) => `<option value="${c.id}">${c.name}</option>`)
+.map((c) => `<option value="${__fhEsc(c.id)}">${__fhEsc(c.name)}</option>`)
 .join("");
 }
 // The three mutually-exclusive "steps" of the add/edit form - gallery
@@ -20578,9 +20664,9 @@ const gridEl = root.querySelector(".screensaver-widget-gallery-grid");
 if (!gridEl) return;
 const registry = this._screenSaverWidgetTypeRegistry();
 const tileHtml = (type, reg) => `<button type="button" class="screensaver-widget-type-tile" data-type="${type}">
-<span class="screensaver-widget-type-icon">${reg.icon}</span>
-<span class="screensaver-widget-type-name">${reg.name}</span>
-<span class="screensaver-widget-type-desc">${reg.desc}</span>
+<span class="screensaver-widget-type-icon">${__fhEsc(reg.icon)}</span>
+<span class="screensaver-widget-type-name">${__fhEsc(reg.name)}</span>
+<span class="screensaver-widget-type-desc">${__fhEsc(reg.desc)}</span>
 </button>`;
 const tilesHtml = Object.keys(registry).map((type) => tileHtml(type, registry[type])).join("");
 const customHtml = tileHtml("custom", {
@@ -20693,7 +20779,7 @@ if (entityInput) entityInput.value = showEntity ? (config.entity || "") : "";
 if (showEntity) {
 const datalist = root.querySelector("#screensaver-widget-entity-datalist");
 if (datalist) {
-datalist.innerHTML = this._entitiesForDomain(reg.entityDomain).map((e) => `<option value="${e.id}">${e.name}</option>`).join("");
+datalist.innerHTML = this._entitiesForDomain(reg.entityDomain).map((e) => `<option value="${__fhEsc(e.id)}">${__fhEsc(e.name)}</option>`).join("");
 }
 }
 const contentField = root.querySelector(".screensaver-widget-content-field");
@@ -21724,10 +21810,10 @@ listEl.innerHTML = `<div data-fh-t="text.no_custom_countdown_items_yet_add_one" 
 listEl.innerHTML = items
 .map(
 (it) => `
-<div class="countdown-item-row" data-id="${it.id}">
-<span class="countdown-item-label">${it.label}</span>
-<span class="countdown-item-date">${it.date}</span>
-<button data-fh-title="text.remove" type="button" class="countdown-item-remove-btn" data-id="${it.id}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
+<div class="countdown-item-row" data-id="${__fhEsc(it.id)}">
+<span class="countdown-item-label">${__fhEsc(it.label)}</span>
+<span class="countdown-item-date">${__fhEsc(it.date)}</span>
+<button data-fh-title="text.remove" type="button" class="countdown-item-remove-btn" data-id="${__fhEsc(it.id)}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>
 </div>
 `
 )
@@ -22477,7 +22563,7 @@ lines.push("");
 }
 const content = this._root.querySelector(".debug-content");
 content.innerHTML = lines
-.map((l) => (l.startsWith("ERROR") ? `<div class="dbg-err">${l}</div>` : `<div>${l || "&nbsp;"}</div>`))
+.map((l) => (l.startsWith("ERROR") ? `<div class="dbg-err">${__fhEsc(l)}</div>` : `<div>${l ? __fhEsc(l) : "&nbsp;"}</div>`))
 .join("");
 // Plain-text copy kept alongside the rendered HTML above - this is what
 // the Copy/Export buttons actually send, so they export the exact same
@@ -22795,9 +22881,9 @@ return `background:${solid};color:${this._textColorFor(solid)}`;
 const bandPx = 22;
 const total = colors.length * bandPx;
 const stops = colors
-.map((c, i) => `${c} ${i * bandPx}px ${(i + 1) * bandPx}px`)
+.map((c, i) => `${__fhEsc(c)} ${i * bandPx}px ${(i + 1) * bandPx}px`)
 .join(", ");
-return `background:repeating-linear-gradient(135deg, ${stops}, ${colors[0]} ${total}px ${total + bandPx}px);color:${this._textColorFor(colors[0])}`;
+return `background:repeating-linear-gradient(135deg, ${stops}, ${__fhEsc(colors[0])} ${total}px ${total + bandPx}px);color:${this._textColorFor(colors[0])}`;
 }
 _renderEventInfoRemindSection(id) {
 const detail = this._eventDetails && this._eventDetails[id];
@@ -22844,7 +22930,7 @@ const listOptions = addableLists.some((l) => l.entity === currentListEntity)
 : [...addableLists, { entity: currentListEntity, label: this._remindersListFriendlyName(currentListEntity) }];
 const listSelectEl = section.querySelector(".event-info-reminder-list-select");
 if (listSelectEl) {
-listSelectEl.innerHTML = listOptions.map((l) => `<option value="${l.entity}">${l.label}</option>`).join("");
+listSelectEl.innerHTML = listOptions.map((l) => `<option value="${__fhEsc(l.entity)}">${__fhEsc(l.label)}</option>`).join("");
 listSelectEl.value = currentListEntity;
 }
 section.querySelector(".event-info-reminder-rollover").checked = !!detail.rollover;
@@ -22948,8 +23034,8 @@ const minutesOptions = [5, 10, 15, 30, 60, 120, 1440];
 const current = this._effectiveReminderMinutes(id);
 const checkboxesHtml = minutesOptions
 .map((m) => {
-const label = m >= 60 ? (m % 1440 === 0 ? `${m / 1440}d` : `${m / 60}h`) : `${m}m`;
-return `<label class="remind-check-opt"><input type="checkbox" class="event-info-remind-check" value="${m}"${current.includes(m) ? " checked" : ""} />${label}</label>`;
+const label = m >= 60 ? (m % 1440 === 0 ? `${m / 1440}d` : `${m / 60}h`) : `${__fhEsc(m)}m`;
+return `<label class="remind-check-opt"><input type="checkbox" class="event-info-remind-check" value="${__fhEsc(m)}"${current.includes(m) ? " checked" : ""} />${label}</label>`;
 })
 .join("");
 section.innerHTML = `<div class="remind-check-row">${checkboxesHtml}</div><span class="event-info-remind-status"></span>`;
@@ -22981,7 +23067,7 @@ const colorMap = this._colorByName(people);
 const checkboxesHtml = others
 .map((p) => {
 const color = this._colorFor(p, colorMap);
-return `<label class="remind-check-opt event-info-person-opt"><input type="checkbox" class="event-info-people-check" value="${p.entity}"${tagged.has(p.entity) ? " checked" : ""} /><span class="event-info-person-dot" style="background:${color}"></span>${p.name}</label>`;
+return `<label class="remind-check-opt event-info-person-opt"><input type="checkbox" class="event-info-people-check" value="${__fhEsc(p.entity)}"${tagged.has(p.entity) ? " checked" : ""} /><span class="event-info-person-dot" style="background:${color}"></span>${__fhEsc(p.name)}</label>`;
 })
 .join("");
 section.innerHTML = `<div class="remind-check-row">${checkboxesHtml}</div><span class="event-info-people-status"></span>`;
@@ -23172,7 +23258,7 @@ const itemsHtml = items.length
   ? items
       .map(
         (it) =>
-          `<div class="checklist-item-row"><input type="checkbox" class="checklist-item-check" data-uid="${it.uid}" ${it.status === "completed" ? "checked" : ""} /><span class="checklist-item-row-text${it.status === "completed" ? " done" : ""}">${it.summary}</span></div>`
+          `<div class="checklist-item-row"><input type="checkbox" class="checklist-item-check" data-uid="${__fhEsc(it.uid)}" ${it.status === "completed" ? "checked" : ""} /><span class="checklist-item-row-text${it.status === "completed" ? " done" : ""}">${__fhEsc(it.summary)}</span></div>`
       )
       .join("")
   : `<div class="remind-hint">${this._t("event_info.checklist_no_items", "No items yet.")}</div>`;
@@ -23212,7 +23298,7 @@ const itemsHtml = items.length
 ? items
     .map(
       (it) =>
-        `<div class="checklist-item-row"><input type="checkbox" class="checklist-item-check" data-item-id="${it.id}" ${it.done ? "checked" : ""} /><span class="checklist-item-row-text${it.done ? " done" : ""}">${it.text}</span><button data-fh-title="text.remove" type="button" class="checklist-item-remove-btn" data-item-id="${it.id}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button></div>`
+        `<div class="checklist-item-row"><input type="checkbox" class="checklist-item-check" data-item-id="${__fhEsc(it.id)}" ${it.done ? "checked" : ""} /><span class="checklist-item-row-text${it.done ? " done" : ""}">${__fhEsc(it.text)}</span><button data-fh-title="text.remove" type="button" class="checklist-item-remove-btn" data-item-id="${it.id}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button></div>`
     )
     .join("")
 : `<div class="remind-hint">${this._t("event_info.checklist_no_items", "No items yet.")}</div>`;
@@ -23299,7 +23385,7 @@ btn.addEventListener("click", async () => {
     if (select && candidates) {
       select.innerHTML = candidates.length
         ? candidates
-            .map((c) => `<option value="${c.entity_id}">${c.name}</option>`)
+            .map((c) => `<option value="${__fhEsc(c.entity_id)}">${__fhEsc(c.name)}</option>`)
             .join("")
         : `<option value="">${this._t("add_event.checklist_no_todo_lists", "No to-do lists found")}</option>`;
       if (candidates.length) {
@@ -23381,7 +23467,7 @@ whenText = sameDay
 }
 const rows = [];
 rows.push(
-`<div class="event-info-row"><div class="label">${detail.isReminder ? this._t("event_info.reminder", "Reminder") : this._t("event_info.calendar", "Calendar")}</div><span class="event-info-chip" style="background:${detail.color};color:${this._textColorFor(detail.color)}">${detail.isReminder ? "&#128276; " : ""}${detail.personName}</span></div>`
+`<div class="event-info-row"><div class="label">${detail.isReminder ? this._t("event_info.reminder", "Reminder") : this._t("event_info.calendar", "Calendar")}</div><span class="event-info-chip" style="background:${__fhEsc(detail.color)};color:${this._textColorFor(detail.color)}">${detail.isReminder ? "&#128276; " : ""}${__fhEsc(detail.personName)}</span></div>`
 );
 rows.push(`<div class="event-info-row"><div class="label">${this._t("event_info.when", "When")}</div>${whenText}</div>`);
 // Events in this series - lazy: the toggle renders a "Checking..."
@@ -23403,7 +23489,7 @@ rows.push(
 );
 }
 if (detail.location) {
-rows.push(`<div class="event-info-row"><div class="label">${this._t("event_info.location", "Location")}</div>${detail.location}</div>`);
+rows.push(`<div class="event-info-row"><div class="label">${this._t("event_info.location", "Location")}</div>${__fhEsc(detail.location)}</div>`);
 }
 // No row at all without can_edit_event - same "you don't even see the
 // affordance" shape as the Delete row just below; whether it then ends
@@ -23439,7 +23525,7 @@ rows.push(`<div class="event-info-row event-info-remind-row"><div class="label">
 // keyed on the to-do item's own stable uid) depending on detail.isReminder.
 rows.push(`<div class="event-info-row event-info-checklist-row"><div class="label">${this._t("event_info.checklist", "Checklist")}</div><div class="event-info-checklist-content"></div></div>`);
 if (detail.description) {
-rows.push(`<div class="event-info-row"><div class="label">${this._t("event_info.details", "Details")}</div>${detail.description}</div>`);
+rows.push(`<div class="event-info-row"><div class="label">${this._t("event_info.details", "Details")}</div>${__fhEsc(detail.description)}</div>`);
 }
 const mealDateKey = this._dateKey(detail.start);
 const mealBlocks = this._getBlocksForDay(detail.start);
@@ -23447,7 +23533,7 @@ const mealBlocks = this._getBlocksForDay(detail.start);
 // "use as meal" shortcut for them.
 if (!detail.isReminder) {
 const useMealButtonsHtml = mealBlocks
-.map((blockName, blockIndex) => `<button type="button" class="event-info-use-meal-btn" data-block-index="${blockIndex}">${blockName}</button>`)
+.map((blockName, blockIndex) => `<button type="button" class="event-info-use-meal-btn" data-block-index="${__fhEsc(blockIndex)}">${__fhEsc(blockName)}</button>`)
 .join("");
 rows.push(
 `<div class="event-info-row event-info-use-meal-row"><div class="label">${this._t("event_info.use_as_meal", "Use as meal")}</div><div class="event-info-use-meal-buttons">${useMealButtonsHtml}</div></div>`
@@ -23465,7 +23551,7 @@ const existingCountdownItem = (this._getSettings().countdownItems || []).find(
 (it) => it.label === detail.summary && it.date === dateKeyForCountdown
 );
 actionButtons.push(
-`<span class="event-info-action event-info-countdown-row"><button type="button" class="event-info-countdown-btn${existingCountdownItem ? " done" : ""}" data-countdown-item-id="${existingCountdownItem ? existingCountdownItem.id : ""}">${existingCountdownItem ? `\u{1F5D1} ${this._t("event_info.countdown_remove", "Remove from countdown")}` : `⏳ ${this._t("event_info.countdown_use", "Use as countdown")}`}</button></span>`
+`<span class="event-info-action event-info-countdown-row"><button type="button" class="event-info-countdown-btn${existingCountdownItem ? " done" : ""}" data-countdown-item-id="${existingCountdownItem ? __fhEsc(existingCountdownItem.id) : ""}">${existingCountdownItem ? `\u{1F5D1} ${this._t("event_info.countdown_remove", "Remove from countdown")}` : `⏳ ${this._t("event_info.countdown_use", "Use as countdown")}`}</button></span>`
 );
 }
 // No row at all without
@@ -23648,7 +23734,7 @@ if (!canActuallyDelete) {
 // read-only (no delete AND no edit - a Holidays feed, an ICS
 // subscription), say so instead of Edit/Delete just silently missing.
 if (deleteRow && support.known && !support.supported && !support.updateSupported) {
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 let noteRow = deleteRow;
 if (deleteRow.classList.contains("event-info-action")) {
 // v1.168.72: the note gets a row of its own below the buttons
@@ -24265,7 +24351,7 @@ if (additionalRecipes.length) {
 const namesHtml = additionalRecipes
 .map((r, idx) => {
 const hasLink = !!(r.grocyRecipeId || (r.link && r.link.trim()));
-return `<span class="${hasLink ? "mvar-link" : ""}" data-idx="${idx}">${r.name}</span>`;
+return `<span class="${hasLink ? "mvar-link" : ""}" data-idx="${idx}">${__fhEsc(r.name)}</span>`;
 })
 .join(", ");
 additionalEl.innerHTML = `<span data-fh-t="text.also" class="mvar-label">${__fhT("text.also", "Also:", null, "h")}</span>${namesHtml}`;
@@ -24336,9 +24422,9 @@ list.innerHTML = entries
 .map((r, idx) => {
 const hasLink = !!(r.grocyRecipeId || (r.link && r.link.trim()));
 return `<div class="additional-recipe-row">
-<span class="additional-recipe-name${hasLink ? " has-link" : ""}" data-idx="${idx}" title="${hasLink ? __fhT("text.open_recipe", "Open recipe", null, "h") : ""}">${r.name}</span>
-<button data-fh-title="text.edit" type="button" class="additional-recipe-edit" data-idx="${idx}" title="${__fhT("text.edit", "Edit", null, "h")}" aria-label="${__fhT("text.edit_x", "Edit %0%", {0: r.name}, "h")}">&#9998;</button>
-<button data-fh-title="text.remove" type="button" class="additional-recipe-remove" data-idx="${idx}" title="${__fhT("text.remove", "Remove", null, "h")}" aria-label="${__fhT("text.remove_x", "Remove %0%", {0: r.name}, "h")}">&#10005;</button>
+<span class="additional-recipe-name${hasLink ? " has-link" : ""}" data-idx="${idx}" title="${hasLink ? __fhT("text.open_recipe", "Open recipe", null, "h") : ""}">${__fhEsc(r.name)}</span>
+<button data-fh-title="text.edit" type="button" class="additional-recipe-edit" data-idx="${idx}" title="${__fhT("text.edit", "Edit", null, "h")}" aria-label="${__fhT("text.edit_x", "Edit %0%", {0: __fhEsc(r.name)}, "h")}">&#9998;</button>
+<button data-fh-title="text.remove" type="button" class="additional-recipe-remove" data-idx="${idx}" title="${__fhT("text.remove", "Remove", null, "h")}" aria-label="${__fhT("text.remove_x", "Remove %0%", {0: __fhEsc(r.name)}, "h")}">&#10005;</button>
 </div>`;
 })
 .join("");
@@ -24485,7 +24571,7 @@ for (let i = 1; i <= 13; i++) {
 const d = new Date(cookedDayDate);
 d.setDate(d.getDate() + i);
 const key = this._dateKey(d);
-const label = `${dayNames[d.getDay()]} ${this._fmtDate(d, { month: "numeric", day: "numeric" })}`;
+const label = `${__fhEsc(dayNames[d.getDay()])} ${this._fmtDate(d, { month: "numeric", day: "numeric" })}`;
 html += `<label class="leftover-day-opt"><input type="checkbox" class="leftover-day-check" value="${key}"${checked.has(key) ? " checked" : ""}> ${label}</label>`;
 }
 container.innerHTML = html;
@@ -24612,9 +24698,9 @@ listEl.innerHTML = pending
 const who = s.suggested_by_name || "Someone";
 const canRemove = canEdit || (s.suggested_by && s.suggested_by === myId);
 return `
-<div class="menu-suggestion-row" data-uid="${s.uid}">
+<div class="menu-suggestion-row" data-uid="${__fhEsc(s.uid)}">
 <div class="menu-suggestion-text">
-<div class="menu-suggestion-name">${s.name}</div>
+<div class="menu-suggestion-name">${__fhEsc(s.name)}</div>
 <div class="menu-suggestion-by">${__fhT("text.suggested_by_x", "suggested by %0%", {0: who}, "h")}</div>
 </div>
 ${canEdit ? `<button data-fh-t="text.add_to_menu" type="button" class="menu-suggestion-apply">${__fhT("text.add_to_menu", "Add to menu", null, "h")}</button>` : ""}
@@ -25360,7 +25446,7 @@ link.hidden = true;
 // people types their PIN.
 async _openLockedMoreCustomPopup(item, overlay) {
 const seq = this._moreLockedSeq;
-const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const headingEl = overlay.querySelector(".more-custom-heading");
 headingEl.innerHTML = `${item.icon ? this._moreMenuIconHtml(item.icon) + " " : ""}<span></span> <span aria-hidden="true">&#128274;</span>`;
 headingEl.querySelector("span").textContent = item.label;
@@ -25479,7 +25565,7 @@ const listEl = this._root && this._root.querySelector(".more-menu-settings-list"
 if (!listEl || !this._settingsMoreMenuDraft) return;
 const draft = this._settingsMoreMenuDraft;
 draft.order = this._moreMenuOrderedKeys(draft);
-const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const last = draft.order.length - 1;
 listEl.innerHTML = draft.order
 .map((key, i) => {
@@ -25501,12 +25587,12 @@ const addBtn = this._root && this._root.querySelector(".more-menu-add-btn");
 if (!form) return;
 const item = this._moreMenuEditing;
 if (addBtn) addBtn.hidden = !!item || !!this._moreMenuPickingTemplate || (this._settingsMoreMenuDraft && this._settingsMoreMenuDraft.custom.length >= 20);
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const t = (k, f) => esc(this._t(k, f));
 if (!item && this._moreMenuPickingTemplate) {
 form.hidden = false;
 form.innerHTML = `<label>${t("settings.more_menu_start_from", "Start from")}</label>
-<div class="mm-templates">${FH_MORE_MENU_TEMPLATES.map((tpl) => `<button type="button" class="mm-template" data-template="${tpl.key}">${tpl.key === "blank" ? "&#10133;" : this._moreMenuIconHtml(tpl.icon)} <span>${t(`more_menu_tpl.${tpl.key}_name`, { blank: "Blank", babysitter: "Babysitter / house info", emergency: "Emergency contacts", addresses: "Address book", wifi: "Guest Wi-Fi" }[tpl.key])}</span></button>`).join("")}</div>
+<div class="mm-templates">${FH_MORE_MENU_TEMPLATES.map((tpl) => `<button type="button" class="mm-template" data-template="${tpl.key}">${tpl.key === "blank" ? "&#10133;" : this._moreMenuIconHtml(tpl.icon)} <span>${t(`more_menu_tpl.${__fhEsc(tpl.key)}_name`, { blank: "Blank", babysitter: "Babysitter / house info", emergency: "Emergency contacts", addresses: "Address book", wifi: "Guest Wi-Fi" }[tpl.key])}</span></button>`).join("")}</div>
 <div class="mm-actions"><button type="button" class="mm-cancel">${t("common.cancel", "Cancel")}</button></div>`;
 return;
 }
@@ -25540,7 +25626,7 @@ form.innerHTML = `
 <label>${t("settings.more_menu_text", "Text")}</label>
 <textarea class="mm-text" maxlength="3000">${esc(item.text)}</textarea>
 <label>${t("settings.more_menu_qr", "QR code (optional)")}</label>
-<select class="mm-qr-type">${[["", t("settings.more_menu_qr_none", "No QR code")], ["link", t("settings.more_menu_qr_link", "Link / website")], ["wifi", t("settings.more_menu_qr_wifi", "Wi-Fi network")], ["unifi", t("settings.more_menu_qr_unifi", "Wi-Fi from UniFi")], ["contact", t("settings.more_menu_qr_contact", "Contact card")], ["phone", t("settings.more_menu_qr_phone", "Phone number (call)")], ["sms", t("settings.more_menu_qr_sms", "Text message")], ["email", t("settings.more_menu_qr_email", "Email")], ["text", t("settings.more_menu_qr_text", "Plain text")]].map(([v, l]) => `<option value="${v}"${(item.qrType || "") === v ? " selected" : ""}>${l}</option>`).join("")}</select>
+<select class="mm-qr-type">${[["", t("settings.more_menu_qr_none", "No QR code")], ["link", t("settings.more_menu_qr_link", "Link / website")], ["wifi", t("settings.more_menu_qr_wifi", "Wi-Fi network")], ["unifi", t("settings.more_menu_qr_unifi", "Wi-Fi from UniFi")], ["contact", t("settings.more_menu_qr_contact", "Contact card")], ["phone", t("settings.more_menu_qr_phone", "Phone number (call)")], ["sms", t("settings.more_menu_qr_sms", "Text message")], ["email", t("settings.more_menu_qr_email", "Email")], ["text", t("settings.more_menu_qr_text", "Plain text")]].map(([v, l]) => `<option value="${__fhEsc(v)}"${(item.qrType || "") === v ? " selected" : ""}>${__fhEsc(l)}</option>`).join("")}</select>
 <div class="mm-qr-fields">${this._moreMenuQrFieldsHtml(item.qrType, item.qrFields || {})}</div>
 <div class="mm-qr-preview"></div>
 <label>${t("settings.more_menu_photos", "Photos (up to 2)")}</label>
@@ -25562,7 +25648,7 @@ this._renderMoreMenuUnifiStatus(form);
 // The fields shown for each QR type - the household fills these in and
 // Family Hub writes the QR format itself.
 _moreMenuQrFieldsHtml(type, f) {
-const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (v) => String(v || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const t = (k, fb) => esc(this._t(k, fb));
 const input = (field, label, opts) => `<label>${label}</label><input type="${(opts && opts.type) || "text"}" class="mm-qrf" data-field="${field}" maxlength="${(opts && opts.max) || 200}" placeholder="${esc((opts && opts.ph) || "")}" value="${esc(f[field])}"${opts && opts.type === "password" ? ' autocomplete="new-password"' : ""} />`;
 const area = (field, label) => `<label>${label}</label><textarea class="mm-qrf" data-field="${field}" maxlength="800">${esc(f[field])}</textarea>`;
@@ -25574,7 +25660,7 @@ return input("url", t("settings.more_menu_qrf_url", "Link"), { ph: "https://..."
 case "wifi":
 return '<div class="mm-unifi-status" data-for="wifi"></div>' + input("ssid", t("settings.more_menu_qrf_ssid", "Network name (SSID)")) +
 input("password", t("settings.more_menu_qrf_password", "Password"), { type: "text" }) +
-`<label>${t("settings.more_menu_qrf_security", "Security")}</label><select class="mm-qrf" data-field="security">${[["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", this._t("settings.more_menu_qrf_open", "None (open network)")]].map(([v, l]) => `<option value="${v}"${(f.security || "WPA") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
+`<label>${t("settings.more_menu_qrf_security", "Security")}</label><select class="mm-qrf" data-field="security">${[["WPA", "WPA / WPA2 / WPA3"], ["WEP", "WEP"], ["nopass", this._t("settings.more_menu_qrf_open", "None (open network)")]].map(([v, l]) => `<option value="${__fhEsc(v)}"${(f.security || "WPA") === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
 check("hidden", t("settings.more_menu_qrf_hidden", "Hidden network"), false) +
 check("show", t("settings.more_menu_qrf_show", "Also show the network name and password in the pop-up"), true) +
 hint("settings.more_menu_qr_wifi_hint", "Guests point their phone camera at the code and tap to join - no typing.");
@@ -26055,12 +26141,12 @@ mealsEl.innerHTML = meals
 .map((m) => {
 const added = pushedIds.has(m.recipeId);
 const daysLabel = __fhT("text.planned_x", "Planned %0%", {0: this._dayLabelForDates(m.dates)});
-const servingsLabel = typeof m.servings === "number" ? __fhT("text.middot_servings_x", " &middot; Servings: %0%", {0: m.servings}) : "";
+const servingsLabel = typeof m.servings === "number" ? __fhT("text.middot_servings_x", " &middot; Servings: %0%", {0: __fhEsc(m.servings)}) : "";
 return `
-<div class="grocery-list-meal-row" data-recipe-id="${m.recipeId}" data-servings="${typeof m.servings === "number" ? m.servings : ""}">
-<input type="checkbox" class="grocery-list-meal-check" data-recipe-id="${m.recipeId}" ${added ? "" : "checked"}>
+<div class="grocery-list-meal-row" data-recipe-id="${__fhEsc(m.recipeId)}" data-servings="${typeof m.servings === "number" ? __fhEsc(m.servings) : ""}">
+<input type="checkbox" class="grocery-list-meal-check" data-recipe-id="${__fhEsc(m.recipeId)}" ${added ? "" : "checked"}>
 <div>
-<div class="grocery-list-meal-name">${m.name}</div>
+<div class="grocery-list-meal-name">${__fhEsc(m.name)}</div>
 <div class="grocery-list-meal-days">${daysLabel}${m.dates.length > 1 ? __fhT("text.added_once_for_this_recipe", " (added once for this recipe)", null, "h") : ""}${servingsLabel}</div>
 </div>
 <span class="grocery-list-meal-badge ${added ? "is-added" : "is-pending"}">${added ? __fhT("text.added", "Added", null, "h") : __fhT("text.not_added_yet", "Not added yet", null, "h")}</span>
@@ -26226,7 +26312,7 @@ const picker = this._root.querySelector(".grocy-shopping-list-picker");
 if (lists.length < 2) {
 picker.style.display = "none";
 } else {
-picker.innerHTML = lists.map((lst) => `<option value="${lst.id}">${lst.name}</option>`).join("");
+picker.innerHTML = lists.map((lst) => `<option value="${__fhEsc(lst.id)}">${__fhEsc(lst.name)}</option>`).join("");
 picker.value = String(this._grocyShoppingListId || 1);
 picker.style.display = "";
 }
@@ -26311,8 +26397,8 @@ statusEl.textContent = "";
 itemsEl.innerHTML = items
 .map((item) => {
 const amountLabel = item.amount_display ? item.amount_display : "";
-const noteLabel = item.note && item.product_id ? ` &middot; ${item.note}` : "";
-const priceLabel = item.estimated_price != null ? ` &middot; ~${item.estimated_price}` : "";
+const noteLabel = item.note && item.product_id ? ` &middot; ${__fhEsc(item.note)}` : "";
+const priceLabel = item.estimated_price != null ? ` &middot; ~${__fhEsc(item.estimated_price)}` : "";
 // Only a product-based row can be "put away" into Grocy stock - a
 // freetext row (no product_id) has nothing in Grocy to attach stock
 // to, so it gets no Scan button or panel at all.
@@ -26321,7 +26407,7 @@ const putawayBtn = item.product_id
 : "";
 const putawayPanel = item.product_id
 ? `
-<div class="grocy-shopping-list-putaway-panel" data-item-id="${item.id}" style="display:none;">
+<div class="grocy-shopping-list-putaway-panel" data-item-id="${__fhEsc(item.id)}" style="display:none;">
 <div class="grocy-shopping-list-putaway-row">
 <label data-fh-t="text.location">${__fhT("text.location", "Location", null, "h")}</label>
 <select class="grocy-shopping-list-putaway-location"><option data-fh-t="text.loading" value="">${__fhT("text.loading", "Loading…", null, "h")}</option></select>
@@ -26351,7 +26437,7 @@ const moveBtn = hasOtherLists
 : "";
 const movePanel = hasOtherLists
 ? `
-<div class="grocy-shopping-list-putaway-panel grocy-shopping-list-move-panel" data-item-id="${item.id}" style="display:none;">
+<div class="grocy-shopping-list-putaway-panel grocy-shopping-list-move-panel" data-item-id="${__fhEsc(item.id)}" style="display:none;">
 <div class="grocy-shopping-list-putaway-row">
 <label data-fh-t="text.move_to">${__fhT("text.move_to", "Move to", null, "h")}</label>
 <select class="grocy-shopping-list-move-target"></select>
@@ -26364,10 +26450,10 @@ const movePanel = hasOtherLists
 `
 : "";
 return `
-<div class="grocy-shopping-list-item-row ${item.done ? "is-done" : ""}" data-item-id="${item.id}">
+<div class="grocy-shopping-list-item-row ${item.done ? "is-done" : ""}" data-item-id="${__fhEsc(item.id)}">
 <input type="checkbox" class="grocy-shopping-list-item-check" ${item.done ? "checked" : ""}>
 <div class="grocy-shopping-list-item-info">
-<div class="grocy-shopping-list-item-name">${item.name}</div>
+<div class="grocy-shopping-list-item-name">${__fhEsc(item.name)}</div>
 ${amountLabel || noteLabel || priceLabel ? `<div class="grocy-shopping-list-item-amount">${amountLabel}${noteLabel}${priceLabel}</div>` : ""}
 </div>
 ${putawayBtn}
@@ -26463,7 +26549,7 @@ if (locationSelect.value === "__new__") this._createGrocyLocationForPutAway(loca
 _renderGrocyPutAwayLocationOptions(selectEl, selectedId) {
 const locations = this._grocyLocationsCache || [];
 const baseOptions = locations.length
-? locations.map((loc) => `<option value="${loc.id}"${selectedId === loc.id ? " selected" : ""}>${loc.name}</option>`).join("")
+? locations.map((loc) => `<option value="${__fhEsc(loc.id)}"${selectedId === loc.id ? " selected" : ""}>${__fhEsc(loc.name)}</option>`).join("")
 : `<option data-fh-t="text.no_locations_yet" value="">${__fhT("text.no_locations_yet", "No locations yet", null, "h")}</option>`;
 selectEl.innerHTML = baseOptions + `<option data-fh-t="text.add_new_location" value="__new__">${__fhT("text.add_new_location", "+ Add new location…", null, "h")}</option>`;
 if (selectedId != null) selectEl.value = String(selectedId);
@@ -26576,7 +26662,7 @@ return;
 panel.style.display = "flex";
 const select = panel.querySelector(".grocy-shopping-list-move-target");
 const otherLists = (this._grocyShoppingListsCache || []).filter((lst) => lst.id !== (this._grocyShoppingListId || 1));
-select.innerHTML = otherLists.map((lst) => `<option value="${lst.id}">${lst.name}</option>`).join("");
+select.innerHTML = otherLists.map((lst) => `<option value="${__fhEsc(lst.id)}">${__fhEsc(lst.name)}</option>`).join("");
 }
 async _confirmGrocyMoveItem(itemId, panel) {
 if (!this._hass) return;
@@ -26829,8 +26915,8 @@ itemsEl.innerHTML = items
 const need = item.min_stock_amount != null ? ` (min ${item.min_stock_amount})` : "";
 return `
 <div class="grocy-low-stock-item-row">
-<div class="grocy-low-stock-item-name">${item.name}</div>
-<div class="grocy-low-stock-item-missing">${__fhT("text.short_x_x", "Short %0%%1%", {0: item.amount_missing, 1: need}, "h")}</div>
+<div class="grocy-low-stock-item-name">${__fhEsc(item.name)}</div>
+<div class="grocy-low-stock-item-missing">${__fhT("text.short_x_x", "Short %0%%1%", {0: __fhEsc(item.amount_missing), 1: need}, "h")}</div>
 </div>
 `;
 })
@@ -26880,12 +26966,12 @@ sectionsEl.style.display = "flex";
 sectionsEl.innerHTML = sections
 .map((section) => {
 const items = Array.isArray(section.items) ? section.items : [];
-const itemsHtml = items.map((item) => `<div class="daily-digest-item-row">${item}</div>`).join("");
+const itemsHtml = items.map((item) => `<div class="daily-digest-item-row">${__fhEsc(item)}</div>`).join("");
 if (section.flat) {
 return `<div class="daily-digest-section daily-digest-flat-section"><div class="daily-digest-section-items">${itemsHtml}</div></div>`;
 }
 const title = section.title || this._t(`daily_digest.section_${section.key}`, section.key);
-return `<div class="daily-digest-section"><div class="daily-digest-section-title">${title}</div><div class="daily-digest-section-items">${itemsHtml}</div></div>`;
+return `<div class="daily-digest-section"><div class="daily-digest-section-title">${__fhEsc(title)}</div><div class="daily-digest-section-items">${itemsHtml}</div></div>`;
 })
 .join("");
 } catch (e) {
@@ -27367,12 +27453,12 @@ const options = [`<option data-fh-t="text.skip_this_ingredient" value="">${__fhT
 // needs to see plainly that flour is really tracked (and consumed) in
 // pounds, for example - previously this only surfaced indirectly, via the
 // conversion warning when the two units didn't line up.
-const stockUnitHint = m.product_id && m.stock_unit_name ? __fhT("text.used_in_x", " · used in %0%", {0: m.stock_unit_name}) : "";
-const scoreLabel = m.product_id ? ` <span class="recipe-import-ingredient-score">${__fhT("text.matched_x_x", "(matched \"%0%\"%1%)", {0: m.product_name, 1: stockUnitHint}, "h")}</span>` : "";
+const stockUnitHint = m.product_id && m.stock_unit_name ? __fhT("text.used_in_x", " · used in %0%", {0: __fhEsc(m.stock_unit_name)}) : "";
+const scoreLabel = m.product_id ? ` <span class="recipe-import-ingredient-score">${__fhT("text.matched_x_x", "(matched \"%0%\"%1%)", {0: __fhEsc(m.product_name), 1: stockUnitHint}, "h")}</span>` : "";
 const formVisible = state.creatingIdx === idx;
 const selectedNewLocationId = state.newLocationChoice ? state.newLocationChoice[idx] : undefined;
 const locationOptions = state.locations
-.map((l) => `<option value="${l.id}"${selectedNewLocationId === l.id ? " selected" : ""}>${l.name}</option>`)
+.map((l) => `<option value="${__fhEsc(l.id)}"${selectedNewLocationId === l.id ? " selected" : ""}>${__fhEsc(l.name)}</option>`)
 .join("");
 const selectedNewStockUnitId = state.newProductUnitChoice ? state.newProductUnitChoice[idx] : undefined;
 const selectedNewPurchaseUnitId = state.newProductPurchaseUnitChoice ? state.newProductPurchaseUnitChoice[idx] : undefined;
@@ -27387,7 +27473,7 @@ const selectedNewQty = state.newProductQtyChoice ? state.newProductQtyChoice[idx
 const qtyVisible = !!selectedNewPurchaseUnitId;
 const qtyValue = selectedNewQty !== undefined ? selectedNewQty : 1;
 const unitOptions = state.units
-.map((u) => `<option value="${u.id}"${selectedNewStockUnitId === u.id ? " selected" : ""}>${u.name}</option>`)
+.map((u) => `<option value="${__fhEsc(u.id)}"${selectedNewStockUnitId === u.id ? " selected" : ""}>${__fhEsc(u.name)}</option>`)
 .concat([`<option data-fh-t="text.add_new_unit" value="__new__">${__fhT("text.add_new_unit", "+ Add new unit…", null, "h")}</option>`])
 .join("");
 const purchaseUnitOptions = [`<option data-fh-t="text.same_as_stock_unit" value="">${__fhT("text.same_as_stock_unit", "Same as stock unit", null, "h")}</option>`]
@@ -27433,7 +27519,7 @@ const newProductForm = formVisible
 // that form, left fully editable with its own Create button, IS the
 // verification step, not a second dialog on top of it.
 const suggestionHtml = suggestion && !formVisible && !state.choices[idx]
-? `<div class="recipe-import-suggestion" data-idx="${idx}">${__fhT("text.looks_like", "Looks like", null, "h")} <strong>${suggestion.name}</strong> ${__fhT("text.sold_by_the_x_used_in_x", "— sold by the %0%, used in %1%.", {0: suggestion.purchase_unit_name, 1: suggestion.stock_unit_name}, "h")} <button data-fh-t="text.use_this" type="button" class="recipe-import-suggestion-use-btn" data-idx="${idx}">${__fhT("text.use_this", "Use this", null, "h")}</button></div>`
+? `<div class="recipe-import-suggestion" data-idx="${idx}">${__fhT("text.looks_like", "Looks like", null, "h")} <strong>${__fhEsc(suggestion.name)}</strong> ${__fhT("text.sold_by_the_x_used_in_x", "— sold by the %0%, used in %1%.", {0: __fhEsc(suggestion.purchase_unit_name), 1: __fhEsc(suggestion.stock_unit_name)}, "h")} <button data-fh-t="text.use_this" type="button" class="recipe-import-suggestion-use-btn" data-idx="${idx}">${__fhT("text.use_this", "Use this", null, "h")}</button></div>`
 : "";
 // Wrapped in one group element (rather than the bare sibling blocks
 // this used to return) purely so the ingredient search box below has a
@@ -27453,7 +27539,7 @@ ${scoreLabel}
 <button data-fh-title="text.remove_this_ingredient_line" type="button" class="recipe-import-ingredient-remove-btn" data-idx="${idx}" title="${__fhT("text.remove_this_ingredient_line", "Remove this ingredient line", null, "h")}">&#10005;</button>
 </div>
 <label class="remind-check-opt recipe-import-ingredient-no-stock-label" data-idx="${idx}"><input type="checkbox" class="recipe-import-ingredient-no-stock-check" data-idx="${idx}"${m.no_stock ? " checked" : ""}> ${__fhT("text.don_t_count_toward_stock_e_g_a_pinch_or", "Don't count toward stock (e.g. \"a pinch\" or \"to taste\")", null, "h")}</label>
-<div class="recipe-import-ingredient-warning" data-idx="${idx}" style="display:${showWarning ? "" : "none"}">&#9888;&#65039; ${m.unit_conversion_warning || ""}</div>
+<div class="recipe-import-ingredient-warning" data-idx="${idx}" style="display:${showWarning ? "" : "none"}">&#9888;&#65039; ${__fhEsc(m.unit_conversion_warning || "")}</div>
 ${suggestionHtml}
 ${newProductForm}
 </div>
@@ -28021,16 +28107,16 @@ const filledMatches = state.matches.filter((m) => (m.raw || "").trim());
 // way, this only changes what shows up in the description/preparation text.
 const includeIngredientsInPrep = root.querySelector(".recipe-import-include-ingredients-check").checked;
 const ingredientsHtml = includeIngredientsInPrep && filledMatches.length
-? `<p><strong data-fh-t="text.ingredients">${__fhT("text.ingredients", "Ingredients", null, "h")}</strong></p><ul>${filledMatches.map((m) => `<li>${m.raw}</li>`).join("")}</ul>`
+? `<p><strong data-fh-t="text.ingredients">${__fhT("text.ingredients", "Ingredients", null, "h")}</strong></p><ul>${filledMatches.map((m) => `<li>${__fhEsc(m.raw)}</li>`).join("")}</ul>`
 : "";
-const instructionsHtml = (state.recipe.instructions || []).map((step) => step.trim()).filter(Boolean).map((step) => `<p>${step}</p>`).join("");
+const instructionsHtml = (state.recipe.instructions || []).map((step) => step.trim()).filter(Boolean).map((step) => `<p>${__fhEsc(step)}</p>`).join("");
 // Preserves where this recipe came from - a real URL becomes a clickable
 // link (opening it later is one tap instead of hunting down the
 // original page again); anything else typed in (paste-text/manual entry
 // has no URL to carry over automatically) is shown as plain text.
 const isUrl = /^https?:\/\//i.test(sourceText);
 const sourceHtml = sourceText
-? `<p><strong data-fh-t="text.source">${__fhT("text.source", "Source:", null, "h")}</strong> ${isUrl ? `<a href="${sourceText}">${sourceText}</a>` : sourceText}</p>`
+? `<p><strong data-fh-t="text.source">${__fhT("text.source", "Source:", null, "h")}</strong> ${isUrl && __fhSafeUrl(sourceText) ? `<a href="${__fhEsc(__fhSafeUrl(sourceText))}">${__fhEsc(sourceText)}</a>` : __fhEsc(sourceText)}</p>`
 : "";
 // Prep/Cook time only ever come from a URL import whose page published
 // schema.org prepTime/cookTime (see _format_iso_duration on the backend)
@@ -28043,7 +28129,7 @@ const sourceHtml = sourceText
 const prepTime = (state.recipe.prep_time || "").trim();
 const cookTime = (state.recipe.cook_time || "").trim();
 const prepCookHtml = prepTime || cookTime
-? `<p>${prepTime ? `<strong data-fh-t="text.prep_2">${__fhT("text.prep_2", "Prep:", null, "h")}</strong> ${prepTime}` : ""}${prepTime && cookTime ? " &middot; " : ""}${cookTime ? `<strong data-fh-t="text.cook_2">${__fhT("text.cook_2", "Cook:", null, "h")}</strong> ${cookTime}` : ""}</p>`
+? `<p>${prepTime ? `<strong data-fh-t="text.prep_2">${__fhT("text.prep_2", "Prep:", null, "h")}</strong> ${__fhEsc(prepTime)}` : ""}${prepTime && cookTime ? " &middot; " : ""}${cookTime ? `<strong data-fh-t="text.cook_2">${__fhT("text.cook_2", "Cook:", null, "h")}</strong> ${__fhEsc(cookTime)}` : ""}</p>`
 : "";
 const description = ingredientsHtml + (instructionsHtml ? `<p><strong data-fh-t="text.preparation">${__fhT("text.preparation", "Preparation", null, "h")}</strong></p>${instructionsHtml}` : "") + prepCookHtml + sourceHtml;
 // "Manage Ingredients with Grocy" off means exactly that - no
@@ -28217,7 +28303,7 @@ list.innerHTML = recipes
 .map(
 (r, idx) =>
 `<div class="loved-item selectable" data-idx="${idx}">
-<div class="loved-name"><span>${r.name}</span><span data-fh-title="text.preview_recipe" class="grocy-picker-preview" title="${__fhT("text.preview_recipe", "Preview recipe", null, "h")}">&#128065;</span></div>
+<div class="loved-name"><span>${__fhEsc(r.name)}</span><span data-fh-title="text.preview_recipe" class="grocy-picker-preview" title="${__fhT("text.preview_recipe", "Preview recipe", null, "h")}">&#128065;</span></div>
 </div>`
 )
 .join("");
@@ -28274,7 +28360,7 @@ list.innerHTML = templates
 const count = (t.blocks || []).length;
 return `<div class="template-row" data-idx="${idx}">
 <div class="template-row-top">
-<span class="loved-name">${t.name}</span>
+<span class="loved-name">${__fhEsc(t.name)}</span>
 <button data-fh-title="text.delete" type="button" class="template-delete-btn" data-idx="${idx}" title="${__fhT("text.delete", "Delete", null, "h")}">&#10005;</button>
 </div>
 <div class="template-summary">${__fhT("text.x_meal_x_planned", "%0% meal%1% planned", {0: count, 1: count === 1 ? "" : "s"}, "h")}</div>
@@ -28353,7 +28439,7 @@ _openAddEvent(tab) {
 const root = this._root;
 const select = root.querySelector(".add-event-calendar-select");
 select.innerHTML = this._getPeople()
-.map((p) => `<option value="${p.entity}">${p.name}</option>`)
+.map((p) => `<option value="${__fhEsc(p.entity)}">${__fhEsc(p.name)}</option>`)
 .join("");
 // v1.168.60 (calendar UX review): start on the signed-in person's own
 // calendar when they have one on this card, instead of always the first
@@ -28369,7 +28455,7 @@ if (myCalendar && Array.from(select.options).some((o) => o.value === myCalendar)
 const remListSelect = root.querySelector(".add-event-reminder-list-select");
 if (remListSelect) {
 remListSelect.innerHTML = this._addableRemindersLists()
-.map((l) => `<option value="${l.entity}">${l.label}</option>`)
+.map((l) => `<option value="${__fhEsc(l.entity)}">${__fhEsc(l.label)}</option>`)
 .join("");
 remListSelect.value = this._config.reminders_entity;
 }
@@ -28452,7 +28538,7 @@ const colorMap = this._colorByName(people);
 const checkboxesHtml = others
 .map((p) => {
 const color = this._colorFor(p, colorMap);
-return `<label class="remind-check-opt event-info-person-opt"><input type="checkbox" class="add-event-people-check" value="${p.entity}" /><span class="event-info-person-dot" style="background:${color}"></span>${p.name}</label>`;
+return `<label class="remind-check-opt event-info-person-opt"><input type="checkbox" class="add-event-people-check" value="${__fhEsc(p.entity)}" /><span class="event-info-person-dot" style="background:${color}"></span>${__fhEsc(p.name)}</label>`;
 })
 .join("");
 content.innerHTML = `<div class="remind-check-row">${checkboxesHtml}</div>`;
@@ -28473,7 +28559,7 @@ listEl.innerHTML = items.length
     .map(
       (item, i) =>
         `<div class="checklist-item-row">` +
-        `<span class="checklist-item-row-text">${item.text}</span>` +
+        `<span class="checklist-item-row-text">${__fhEsc(item.text)}</span>` +
         `<button data-fh-title="text.remove" type="button" class="checklist-item-remove-btn" data-index="${i}" title="${__fhT("text.remove", "Remove", null, "h")}">&#10005;</button>` +
         `</div>`
     )
@@ -28500,7 +28586,7 @@ const candidates = await this._fetchTodoListCandidates();
 if (!candidates) return;
 const previous = select.value;
 select.innerHTML = candidates.length
-  ? candidates.map((c) => `<option value="${c.entity_id}">${c.name}</option>`).join("")
+  ? candidates.map((c) => `<option value="${__fhEsc(c.entity_id)}">${__fhEsc(c.name)}</option>`).join("")
   : `<option value="">${this._t("add_event.checklist_no_todo_lists", "No to-do lists found")}</option>`;
 if (previous && candidates.some((c) => c.entity_id === previous)) select.value = previous;
 }
@@ -28659,7 +28745,7 @@ const selected = new Set(selectedDays && selectedDays.length ? selectedDays : [0
 // Mon-first (idx 0 = Monday), Intl names are Sunday-first
 const localNames = this._weekdayNames("short");
 return REMINDER_WEEKDAY_LABELS.map(
-(label, idx) => `<button type="button" class="rolldays-btn ${selected.has(idx) ? "active" : ""}" data-day="${idx}">${localNames[(idx + 1) % 7] || label}</button>`
+(label, idx) => `<button type="button" class="rolldays-btn ${selected.has(idx) ? "active" : ""}" data-day="${idx}">${(localNames[(idx + 1) % 7] ? __fhEsc(localNames[(idx + 1) % 7]) : label)}</button>`
 ).join("");
 }
 _wireRolldaysToggle(container) {
@@ -29135,7 +29221,7 @@ const g = groups[key];
 const initial = g.initial || (g.name || "?").trim().charAt(0).toUpperCase();
 const isActive = activeKeys.includes(key);
 const isDimmed = activeKeys.length > 0 && !isActive;
-return `<div class="chip${isActive ? " active-filter" : ""}${isDimmed ? " dimmed" : ""}" data-key="${key}" style="background:${g.color}"><span class="avatar">${initial}</span>${g.name} ${g.count}</div>`;
+return `<div class="chip${isActive ? " active-filter" : ""}${isDimmed ? " dimmed" : ""}" data-key="${__fhEsc(key)}" style="background:${__fhEsc(g.color)}"><span class="avatar">${initial}</span>${__fhEsc(g.name)} ${__fhEsc(g.count)}</div>`;
 })
 .join("");
 // Separate from the per-calendar chips above (which filter by WHICH
@@ -29149,7 +29235,7 @@ const typeChipsHtml = [
 .map(({ type, label, count }) => {
 const isActive = typeFilter.includes(type);
 const isDimmed = typeFilter.length > 0 && !isActive;
-return `<div class="chip type-chip${isActive ? " active-filter" : ""}${isDimmed ? " dimmed" : ""}" data-type="${type}">${label} ${count}</div>`;
+return `<div class="chip type-chip${isActive ? " active-filter" : ""}${isDimmed ? " dimmed" : ""}" data-type="${__fhEsc(type)}">${__fhEsc(label)} ${__fhEsc(count)}</div>`;
 })
 .join("");
 legend.innerHTML = identityChipsHtml + typeChipsHtml;
@@ -29247,7 +29333,7 @@ _renderMonthGrid() {
 const gridEl = this._root.querySelector(".grid");
 gridEl.className = "grid mode-month";
 const { dayNames, cellsHtml } = this._buildMonthCellsHtml(null);
-gridEl.innerHTML = `<div class="month-weekday-row">${dayNames.map((d) => `<div class="mwd">${d}</div>`).join("")}</div><div class="month-cells">${cellsHtml}</div>`;
+gridEl.innerHTML = `<div class="month-weekday-row">${dayNames.map((d) => `<div class="mwd">${__fhEsc(d)}</div>`).join("")}</div><div class="month-cells">${cellsHtml}</div>`;
 }
 // split out of the old _renderMonthGrid so the classic Month view
 // and the new "split" variant's own calendar pane (see
@@ -29418,7 +29504,7 @@ const continuesToNext = !e.isReminder && e.end && e.end.getTime() > dayEnd.getTi
 const continueClass = `${continuesFromPrev ? " mc-continue-prev" : ""}${continuesToNext ? " mc-continue-next" : ""}`;
 const prefix = continuesFromPrev ? "◂ " : "";
 const suffix = continuesToNext ? " ▸" : "";
-return `<div class="mc-pill${e.isReminder ? " mc-reminder-pill" : ""}${continueClass}${isPastEvent(e) ? " past" : ""}" style="${e.bg || `background:${e.color}`}">${e.isReminder ? "&#128276; " : ""}${prefix}${e.summary}${suffix}</div>`;
+return `<div class="mc-pill${e.isReminder ? " mc-reminder-pill" : ""}${continueClass}${isPastEvent(e) ? " past" : ""}" style="${(e.bg ? __fhEsc(e.bg) : `background:${__fhEsc(e.color)}`)}">${e.isReminder ? "&#128276; " : ""}${prefix}${__fhEsc(e.summary)}${suffix}</div>`;
 })
 .join("") + (more > 0 ? `<div class="mc-more">${__fhT("text.x_more", "+%0% more", {0: more}, "h")}</div>` : "");
 // meals render BEFORE (above) events/reminders in each cell,
@@ -29434,18 +29520,18 @@ const m = this._getMealForDay(dateKey, cellDate, bi);
 if (!m || !m.name || !m.name.trim()) return "";
 const repeatIcon = m.recur === "weekly" ? "\u{1F501} " : "";
 const leftoverIcon = m.leftover ? "\u{267B}\u{FE0F} " : "";
-return `<div class="mc-pill mc-meal-pill" style="background:${m.color || "#f0e6c4"}" data-date="${dateKey}" data-block-index="${bi}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${m.name}</div>`;
+return `<div class="mc-pill mc-meal-pill" style="background:${__fhEsc(m.color || "#f0e6c4")}" data-date="${dateKey}" data-block-index="${__fhEsc(bi)}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${__fhEsc(m.name)}</div>`;
 })
 .join("");
 }
 pillsHtml = mealsHtml + pillsHtml;
 const badgesHtml = badges
-.map((b) => `<span class="custody-badge" style="background:${b.color};color:${this._textColorFor(b.color)}">${b.text}</span>`)
+.map((b) => `<span class="custody-badge" style="background:${__fhEsc(b.color)};color:${this._textColorFor(b.color)}">${__fhEsc(b.text)}</span>`)
 .join("");
 const matchedHolidayBg = this._matchHolidayBackgroundForDate(settings, cellDate, isToday);
 const dayColHolidayStyle =
 matchedHolidayBg
-? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${matchedHolidayBg.imageUrl.replace(/'/g, "%27")}'); background-size: cover; background-position: center;"`
+? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${__fhCssUrl(matchedHolidayBg.imageUrl)}'); background-size: cover; background-position: center;"`
 : "";
 const dayColHolidayDark = matchedHolidayBg ? this._isHolidayBackgroundDark(matchedHolidayBg.imageUrl) : false;
 cellsHtml += `<div class="month-cell ${isToday ? "today" : ""} ${outside ? "outside" : ""} ${selectedDateKey && dateKey === selectedDateKey ? "selected" : ""}${dayColHolidayDark ? " holiday-bg-dark" : ""}" data-date="${dateKey}"${dayColHolidayStyle}>
@@ -29487,7 +29573,7 @@ this._monthSplitSelectedDate = this._dateKey(todayInThisMonth ? today : anchor);
 }
 this._monthSplitAnchorKey = anchorKey;
 const { dayNames, cellsHtml } = this._buildMonthCellsHtml(this._monthSplitSelectedDate);
-const calHtml = `<div class="month-weekday-row">${dayNames.map((d) => `<div class="mwd">${d}</div>`).join("")}</div><div class="month-cells">${cellsHtml}</div>`;
+const calHtml = `<div class="month-weekday-row">${dayNames.map((d) => `<div class="mwd">${__fhEsc(d)}</div>`).join("")}</div><div class="month-cells">${cellsHtml}</div>`;
 const detailHtml = this._buildMonthSplitDetailHtml(this._monthSplitSelectedDate);
 gridEl.innerHTML = `<div class="month-split-cal">${calHtml}</div><div class="month-split-detail">${detailHtml}</div>`;
 }
@@ -29613,9 +29699,9 @@ const itemsHtml = items.length
 ? items
 .map(
 (it) =>
-`<div class="msd-item event" data-event-id="${it.id}" style="${it.bg || `background:${it.color}`}">
+`<div class="msd-item event" data-event-id="${__fhEsc(it.id)}" style="${(it.bg ? __fhEsc(it.bg) : `background:${__fhEsc(it.color)}`)}">
 <span class="msd-item-time">${it.allDay ? __fhT("text.all_day", "All day", null, "h") : fmtTime(it.start)}</span>
-<span class="msd-item-summary">${it.isReminder ? "&#128276; " : ""}${it.isBirthday ? "\u{1F382} " : ""}${it.summary}</span>
+<span class="msd-item-summary">${it.isReminder ? "&#128276; " : ""}${it.isBirthday ? "\u{1F382} " : ""}${__fhEsc(it.summary)}</span>
 </div>`
 )
 .join("")
@@ -29629,7 +29715,7 @@ const m = this._getMealForDay(dateKey, cellDate, bi);
 if (!m || !m.name || !m.name.trim()) return "";
 const repeatIcon = m.recur === "weekly" ? "\u{1F501} " : "";
 const leftoverIcon = m.leftover ? "\u{267B}\u{FE0F} " : "";
-return `<div class="msd-item mc-meal-pill" style="background:${m.color || "#f0e6c4"}" data-date="${dateKey}" data-block-index="${bi}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${m.name}</div>`;
+return `<div class="msd-item mc-meal-pill" style="background:${__fhEsc(m.color || "#f0e6c4")}" data-date="${dateKey}" data-block-index="${__fhEsc(bi)}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${__fhEsc(m.name)}</div>`;
 })
 .join("");
 }
@@ -29731,7 +29817,7 @@ const dateKey = this._dateKey(dayStart);
 const matchedHolidayBg = this._matchHolidayBackgroundForDate(settings, dayStart, isToday);
 const dayColHolidayStyle =
 matchedHolidayBg
-? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${matchedHolidayBg.imageUrl.replace(/'/g, "%27")}'); background-size: cover; background-position: center;"`
+? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${__fhCssUrl(matchedHolidayBg.imageUrl)}'); background-size: cover; background-position: center;"`
 : "";
 const dayColHolidayDark = matchedHolidayBg ? this._isHolidayBackgroundDark(matchedHolidayBg.imageUrl) : false;
 const blocks = this._getBlocksForDay(dayStart);
@@ -29762,7 +29848,7 @@ const bannerStyle = bannerColor ? ` style="background:${bannerColor};color:${ban
 // household member (removed/renamed since the meal was planned) rather
 // than falling back to some arbitrary color.
 const cookColor = hasName && plan.cook ? colorMap[plan.cook.trim().toLowerCase()] || null : null;
-const cookBarHtml = cookColor ? `<span class="cook-bar" style="background:${cookColor}" title="${plan.cook}"></span>` : "";
+const cookBarHtml = cookColor ? `<span class="cook-bar" style="background:${cookColor}" title="${__fhEsc(plan.cook)}"></span>` : "";
 const editClass = this._mealEditMode ? " edit-mode" : "";
 const recurClass = plan && plan.recur === "weekly" ? " recurring-meal" : "";
 const recurIcon = plan && plan.recur === "weekly" ? "\u{1F501} " : "";
@@ -29772,7 +29858,7 @@ bannersHtml += `
 <div class="menu-banner ${hasName ? "" : "empty"}${editClass}${recurClass}${leftoverClass}" data-day-index="${i}" data-block-index="${blockIndex}"${bannerStyle}>
 ${flagChar ? `<span class="rating-flag">${flagChar}</span>` : ""}
 <span class="block-label">${this._blockLabel(blockName)}</span>
-<span class="menu-text">${hasName ? `${recurIcon}${leftoverIcon}${plan.name}` : this._tapToAddBlockText(blockName)}</span>
+<span class="menu-text">${hasName ? `${recurIcon}${leftoverIcon}${__fhEsc(plan.name)}` : this._tapToAddBlockText(blockName)}</span>
 ${cookBarHtml}
 </div>
 `;
@@ -29948,7 +30034,7 @@ const allDay = dayEvents.filter((e) => e.allDay);
 const timed = dayEvents.filter((e) => !e.allDay);
 const allDayHtml = allDay.length
 ? `<div class="all-day-row">${allDay
-.map((ev) => `<span class="all-day-chip${isPastEvent(ev) ? " past" : ""}" style="${ev.bg || `background:${ev.color}`}" data-event-id="${ev.id}">${ev.summary}</span>`)
+.map((ev) => `<span class="all-day-chip${isPastEvent(ev) ? " past" : ""}" style="${(ev.bg ? __fhEsc(ev.bg) : `background:${__fhEsc(ev.color)}`)}" data-event-id="${__fhEsc(ev.id)}">${__fhEsc(ev.summary)}</span>`)
 .join("")}</div>`
 : "";
 let hourRowsHtml = "";
@@ -29969,11 +30055,11 @@ if (endMinutes <= startMinutes) endMinutes = Math.min(rangeEndMin, startMinutes 
 const top = ((startMinutes - rangeStartMin) / 60) * PX_PER_HOUR;
 const height = Math.max(16, ((endMinutes - startMinutes) / 60) * PX_PER_HOUR);
 const timeLabel = this._fmtTimeOfDay(ev.start);
-const left = `calc(32px + (100% - 34px) * ${col} / ${totalCols})`;
-const width = `calc((100% - 34px) / ${totalCols} - 2px)`;
-return `<div class="tl-event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="top:${top}px;height:${height}px;left:${left};width:${width};${ev.bg || `background:${ev.color}`}" data-event-id="${ev.id}">
+const left = `calc(32px + (100% - 34px) * ${__fhEsc(col)} / ${__fhEsc(totalCols)})`;
+const width = `calc((100% - 34px) / ${__fhEsc(totalCols)} - 2px)`;
+return `<div class="tl-event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="top:${top}px;height:${height}px;left:${left};width:${width};${(ev.bg ? __fhEsc(ev.bg) : `background:${__fhEsc(ev.color)}`)}" data-event-id="${__fhEsc(ev.id)}">
 <span class="tl-time">${timeLabel}</span>
-<span class="tl-summary">${ev.isReminder ? "&#128276; " : ""}${ev.summary}</span>
+<span class="tl-summary">${ev.isReminder ? "&#128276; " : ""}${__fhEsc(ev.summary)}</span>
 </div>`;
 })
 .join("");
@@ -29984,12 +30070,12 @@ eventsHtml = dayEvents
 const timeLabel = ev.allDay
 ? __fhT("text.all_day", "All day")
 : this._fmtTimeOfDay(ev.start);
-return `<div class="event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="${ev.bg || `background:${ev.color}`}" data-event-id="${ev.id}">
+return `<div class="event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="${(ev.bg ? __fhEsc(ev.bg) : `background:${__fhEsc(ev.color)}`)}" data-event-id="${__fhEsc(ev.id)}">
 <div class="event-top">
-<span class="avatar" style="background:rgba(0,0,0,0.3)">${ev.isReminder ? "&#128276;" : ev.initial}</span>
+<span class="avatar" style="background:rgba(0,0,0,0.3)">${ev.isReminder ? "&#128276;" : __fhEsc(ev.initial)}</span>
 <span class="time">${timeLabel}</span>
 </div>
-<span class="summary">${ev.isReminder ? "&#128276; " : ""}${ev.summary}</span>
+<span class="summary">${ev.isReminder ? "&#128276; " : ""}${__fhEsc(ev.summary)}</span>
 </div>`;
 })
 .join("");
@@ -30006,9 +30092,9 @@ const isSelected = this._weekSelectedDate === dateKey;
 return `
 <div class="day-col ${isToday ? "today" : ""}${dayColHolidayDark ? " holiday-bg-dark" : ""}"${dayColHolidayStyle}>
 <div class="day-header ${isSelected ? "selected" : ""}" data-date="${dateKey}">
-<div class="name-row"><div class="name">${dayNames[dayStart.getDay()]}</div>${wxIconHtml}</div>
+<div class="name-row"><div class="name">${__fhEsc(dayNames[dayStart.getDay()])}</div>${wxIconHtml}</div>
 <div class="num">${dayStart.getDate()}${badges
-.map((b) => `<span class="custody-badge" style="background:${b.color};color:${this._textColorFor(b.color)}">${b.text}</span>`)
+.map((b) => `<span class="custody-badge" style="background:${__fhEsc(b.color)};color:${this._textColorFor(b.color)}">${__fhEsc(b.text)}</span>`)
 .join("")}${wxTempHtml}</div>
 </div>
 <div class="menu-blocks">${bannersHtml}</div>
@@ -30126,15 +30212,15 @@ dayBadges.push({ text: b.text, color: personColor });
 }
 }
 const dayBadgesHtml = dayBadges
-.map((b) => `<span class="custody-badge" style="background:${b.color};color:${this._textColorFor(b.color)}">${b.text}</span>`)
+.map((b) => `<span class="custody-badge" style="background:${__fhEsc(b.color)};color:${this._textColorFor(b.color)}">${__fhEsc(b.text)}</span>`)
 .join("");
 const matchedHolidayBg = this._matchHolidayBackgroundForDate(settings, dayStart, isToday);
 const dayColHolidayStyle =
 matchedHolidayBg
-? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${matchedHolidayBg.imageUrl.replace(/'/g, "%27")}'); background-size: cover; background-position: center;"`
+? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${__fhCssUrl(matchedHolidayBg.imageUrl)}'); background-size: cover; background-position: center;"`
 : "";
 const dayColHolidayDark = matchedHolidayBg ? this._isHolidayBackgroundDark(matchedHolidayBg.imageUrl) : false;
-rowsHtml += `<div class="planner-day-cell${isToday ? " today" : ""}${dayColHolidayDark ? " holiday-bg-dark" : ""}"${dayColHolidayStyle}><span class="planner-day-name">${dayNames[dayStart.getDay()]}</span><span class="planner-day-number">${dayStart.getDate()}${dayBadgesHtml}</span></div>`;
+rowsHtml += `<div class="planner-day-cell${isToday ? " today" : ""}${dayColHolidayDark ? " holiday-bg-dark" : ""}"${dayColHolidayStyle}><span class="planner-day-name">${__fhEsc(dayNames[dayStart.getDay()])}</span><span class="planner-day-number">${dayStart.getDate()}${dayBadgesHtml}</span></div>`;
 let dayMobileSections = "";
 // Planner view genuinely has one column per person (unlike Week/
 // Month, which merge everyone into one shared per-day list) - this is
@@ -30219,7 +30305,7 @@ dayEvents.sort((a, b) => (a.allDay === b.allDay ? a.start - b.start : a.allDay ?
 const cellHtml = dayEvents
 .map((ev) => {
 const timeLabel = ev.allDay ? this._t("event_info.series_all_day", "All day") : this._fmtTimeOfDay(ev.start);
-return `<div class="event planner-event${ev.isReminder ? " reminder-event" : ""}" style="${ev.bg}" data-event-id="${ev.id}"><span class="time">${ev.isReminder ? "&#128276; " : ""}${timeLabel}</span><span class="summary">${ev.summary}</span></div>`;
+return `<div class="event planner-event${ev.isReminder ? " reminder-event" : ""}" style="${__fhEsc(ev.bg)}" data-event-id="${__fhEsc(ev.id)}"><span class="time">${ev.isReminder ? "&#128276; " : ""}${timeLabel}</span><span class="summary">${__fhEsc(ev.summary)}</span></div>`;
 })
 .join("");
 rowsHtml += `<div class="planner-person-cell">${cellHtml}</div>`;
@@ -30235,7 +30321,7 @@ dayMobileSections += `<div class="planner-mobile-person"><div class="planner-mob
 }
 if (isMobile) {
 const dayBody = dayMobileSections || `<div data-fh-t="text.nothing_planned" class="planner-mobile-empty">${__fhT("text.nothing_planned", "Nothing planned", null, "h")}</div>`;
-mobileHtml += `<div class="planner-mobile-day${isToday ? " today" : ""}"><div class="planner-mobile-day-header${dayColHolidayDark ? " holiday-bg-dark" : ""}"${dayColHolidayStyle}><span class="planner-day-name">${dayNames[dayStart.getDay()]}</span><span class="planner-day-number">${dayStart.getDate()}${dayBadgesHtml}</span></div><div class="planner-mobile-persons">${dayBody}</div></div>`;
+mobileHtml += `<div class="planner-mobile-day${isToday ? " today" : ""}"><div class="planner-mobile-day-header${dayColHolidayDark ? " holiday-bg-dark" : ""}"${dayColHolidayStyle}><span class="planner-day-name">${__fhEsc(dayNames[dayStart.getDay()])}</span><span class="planner-day-number">${dayStart.getDate()}${dayBadgesHtml}</span></div><div class="planner-mobile-persons">${dayBody}</div></div>`;
 }
 }
 gridEl.innerHTML = isMobile
@@ -30330,7 +30416,7 @@ const { dayStart, dayEnd, colorMap, PX_PER_HOUR, rangeStart, rangeEnd, rangeStar
 const matchedHolidayBg = this._matchHolidayBackgroundForDate(settings, dayStart, isToday);
 const dayColHolidayStyle =
 matchedHolidayBg
-? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${matchedHolidayBg.imageUrl.replace(/'/g, "%27")}'); background-size: cover; background-position: center;"`
+? ` style="background-image: linear-gradient(rgba(0,0,0,0.32), rgba(0,0,0,0.32)), url('${__fhCssUrl(matchedHolidayBg.imageUrl)}'); background-size: cover; background-position: center;"`
 : "";
 const dayColHolidayDark = matchedHolidayBg ? this._isHolidayBackgroundDark(matchedHolidayBg.imageUrl) : false;
 const isFamily = !person;
@@ -30416,7 +30502,7 @@ const allDay = laneEvents.filter((e) => e.allDay);
 const timed = laneEvents.filter((e) => !e.allDay);
 const allDayHtml = allDay.length
 ? `<div class="all-day-row">${allDay
-.map((ev) => `<span class="all-day-chip${isPastEvent(ev) ? " past" : ""}" style="${ev.bg || `background:${ev.color}`}" data-event-id="${ev.id}">${ev.summary}</span>`)
+.map((ev) => `<span class="all-day-chip${isPastEvent(ev) ? " past" : ""}" style="${(ev.bg ? __fhEsc(ev.bg) : `background:${__fhEsc(ev.color)}`)}" data-event-id="${__fhEsc(ev.id)}">${__fhEsc(ev.summary)}</span>`)
 .join("")}</div>`
 : "";
 let hourRowsHtml = "";
@@ -30437,11 +30523,11 @@ if (endMinutes <= startMinutes) endMinutes = Math.min(rangeEndMin, startMinutes 
 const top = ((startMinutes - rangeStartMin) / 60) * PX_PER_HOUR;
 const height = Math.max(16, ((endMinutes - startMinutes) / 60) * PX_PER_HOUR);
 const timeLabel = this._fmtTimeOfDay(ev.start);
-const left = `calc(32px + (100% - 34px) * ${col} / ${totalCols})`;
-const width = `calc((100% - 34px) / ${totalCols} - 2px)`;
-return `<div class="tl-event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="top:${top}px;height:${height}px;left:${left};width:${width};${ev.bg || `background:${ev.color}`}" data-event-id="${ev.id}">
+const left = `calc(32px + (100% - 34px) * ${__fhEsc(col)} / ${__fhEsc(totalCols)})`;
+const width = `calc((100% - 34px) / ${__fhEsc(totalCols)} - 2px)`;
+return `<div class="tl-event${ev.isReminder ? " reminder-event" : ""}${isPastEvent(ev) ? " past" : ""}" style="top:${top}px;height:${height}px;left:${left};width:${width};${(ev.bg ? __fhEsc(ev.bg) : `background:${__fhEsc(ev.color)}`)}" data-event-id="${__fhEsc(ev.id)}">
 <span class="tl-time">${timeLabel}</span>
-<span class="tl-summary">${ev.isReminder ? "&#128276; " : ""}${ev.summary}</span>
+<span class="tl-summary">${ev.isReminder ? "&#128276; " : ""}${__fhEsc(ev.summary)}</span>
 </div>`;
 })
 .join("");
@@ -30605,9 +30691,9 @@ const itemsHtml = items.length
 ? items
 .map(
 (it) =>
-`<div class="agenda-item event" data-event-id="${it.id}" style="${it.bg || `background:${it.color}`}">
+`<div class="agenda-item event" data-event-id="${__fhEsc(it.id)}" style="${(it.bg ? __fhEsc(it.bg) : `background:${__fhEsc(it.color)}`)}">
 <span class="agenda-item-time">${it.allDay ? __fhT("text.all_day", "All day", null, "h") : fmtTime(it.start)}</span>
-<span class="agenda-item-summary">${it.isReminder ? "&#128276; " : ""}${it.isBirthday ? "\u{1F382} " : ""}${it.summary}</span>
+<span class="agenda-item-summary">${it.isReminder ? "&#128276; " : ""}${it.isBirthday ? "\u{1F382} " : ""}${__fhEsc(it.summary)}</span>
 </div>`
 )
 .join("")
@@ -30621,7 +30707,7 @@ const m = this._getMealForDay(dateKey, dayStart, bi);
 if (!m || !m.name || !m.name.trim()) return "";
 const repeatIcon = m.recur === "weekly" ? "\u{1F501} " : "";
 const leftoverIcon = m.leftover ? "\u{267B}\u{FE0F} " : "";
-return `<div class="agenda-item mc-meal-pill" style="background:${m.color || "#f0e6c4"}" data-date="${dateKey}" data-block-index="${bi}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${m.name}</div>`;
+return `<div class="agenda-item mc-meal-pill" style="background:${__fhEsc(m.color || "#f0e6c4")}" data-date="${dateKey}" data-block-index="${__fhEsc(bi)}">\u{1F37D}\u{FE0F} ${repeatIcon}${leftoverIcon}${__fhEsc(m.name)}</div>`;
 })
 .join("");
 }

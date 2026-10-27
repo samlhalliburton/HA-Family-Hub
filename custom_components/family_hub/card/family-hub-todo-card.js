@@ -221,7 +221,84 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+};
+// URL allowlist for href/src built from data (recipe links, photos, todo
+// links). Only http(s), mailto/tel (links) and same-origin paths pass;
+// javascript:, vbscript:, and non-image data: URLs never do. Returns ""
+// for anything else. Image data: URLs are allowed only when forImg is true.
+var __fhSafeUrl = function (u, forImg) {
+  var raw = String(u == null ? "" : u);
+  var s = "";
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw.charCodeAt(i);
+    // drop whitespace/control/zero-width characters browsers ignore inside a scheme ("java\tscript:")
+    if (c <= 32 || (c >= 127 && c <= 159) || (c >= 8203 && c <= 8207) || c === 8232 || c === 8233 || c === 65279) continue;
+    s += raw.charAt(i);
+  }
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return String(u).trim();
+  if (/^\/(?![\/\\])/.test(s)) return String(u).trim();
+  if (!forImg && /^(mailto|tel):/i.test(s)) return String(u).trim();
+  if (forImg && /^data:image\/(png|jpe?g|gif|webp|avif);/i.test(s)) return String(u).trim();
+  return "";
+};
+// Allow-list HTML sanitizer for markup that arrives from outside this card
+// (Grocy recipe descriptions, imported recipe pages). Parsing happens in an
+// inert DOMParser document, so nothing runs or loads while it is cleaned.
+// Unknown tags are unwrapped, dangerous ones removed with their contents,
+// and every attribute not on the short list below is dropped.
+var __fhSanitizeHtml = function (html) {
+  var KEEP = { A: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, BR: 1, P: 1, UL: 1, OL: 1, LI: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, HR: 1, SPAN: 1, DIV: 1, IMG: 1, SUB: 1, SUP: 1, SMALL: 1, BLOCKQUOTE: 1, CODE: 1, PRE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1 };
+  var DROP = { SCRIPT: 1, STYLE: 1, IFRAME: 1, FRAME: 1, FRAMESET: 1, OBJECT: 1, EMBED: 1, SVG: 1, MATH: 1, TEMPLATE: 1, NOSCRIPT: 1, LINK: 1, META: 1, BASE: 1, TITLE: 1, FORM: 1, INPUT: 1, BUTTON: 1, TEXTAREA: 1, SELECT: 1, OPTION: 1, AUDIO: 1, VIDEO: 1, SOURCE: 1, CANVAS: 1, APPLET: 1 };
+  var doc;
+  try {
+    doc = new DOMParser().parseFromString("<!doctype html><body>" + String(html == null ? "" : html), "text/html");
+  } catch (e) {
+    return __fhEsc(html);
+  }
+  var clean = function (node) {
+    Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+      if (child.nodeType === 3) return;
+      if (child.nodeType !== 1) {
+        node.removeChild(child);
+        return;
+      }
+      var tag = child.tagName.toUpperCase();
+      if (DROP[tag]) {
+        node.removeChild(child);
+        return;
+      }
+      clean(child);
+      if (!KEEP[tag]) {
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        node.removeChild(child);
+        return;
+      }
+      Array.prototype.slice.call(child.attributes).forEach(function (a) {
+        var n = a.name.toLowerCase();
+        if (tag === "A" && n === "href") {
+          var h = __fhSafeUrl(a.value, false);
+          if (h) child.setAttribute("href", h);
+          else child.removeAttribute(a.name);
+        } else if (tag === "IMG" && n === "src") {
+          var src = __fhSafeUrl(a.value, true);
+          if (src) child.setAttribute("src", src);
+          else child.removeAttribute(a.name);
+        } else if ((tag === "IMG" && n === "alt") || ((tag === "A" || tag === "IMG") && n === "title")) {
+          /* plain-text attributes - kept */
+        } else {
+          child.removeAttribute(a.name);
+        }
+      });
+      if (tag === "A") {
+        child.setAttribute("rel", "noopener noreferrer");
+        child.setAttribute("target", "_blank");
+      }
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML;
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -2014,9 +2091,9 @@ class FamilyHubTodoCard extends HTMLElement {
     return entries;
   }
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   _escAttr(s) {
     return this._esc(s).replace(/"/g, "&quot;");
@@ -3007,7 +3084,7 @@ class FamilyHubTodoCard extends HTMLElement {
     const weights = this._fitToScreen() && multi ? this._rowHeightWeights(groups.length) : null;
     return groups
       .map((group, i) => {
-        const weightStyle = weights ? ` style="flex:${weights[i]} 1 0"` : "";
+        const weightStyle = weights ? ` style="flex:${__fhEsc(weights[i])} 1 0"` : "";
         const rowHtml = `<div class="todo-board-row${multi ? " multi-row" : ""}"${weightStyle}>${group.map((d) => this._columnHtml(d)).join("")}</div>`;
         const handleHtml =
           weights && i < groups.length - 1
@@ -3425,7 +3502,7 @@ class FamilyHubTodoCard extends HTMLElement {
       return;
     }
     const listOptions = descriptors
-      .map((d) => `<option value="${this._escAttr(d.key)}" data-kind="${d.kind}">${this._esc(this._listName(d))}${d.kind === "grocy" ? ` (${this._t("todo.column.grocy_tag", "Grocy")})` : ""}</option>`)
+      .map((d) => `<option value="${this._escAttr(d.key)}" data-kind="${__fhEsc(d.kind)}">${this._esc(this._listName(d))}${d.kind === "grocy" ? ` (${this._t("todo.column.grocy_tag", "Grocy")})` : ""}</option>`)
       .join("");
     panel.innerHTML = `
       <label>${this._t("todo.add_item.list_label", "List")}<select class="f-list">${listOptions}</select></label>
@@ -3548,7 +3625,7 @@ class FamilyHubTodoCard extends HTMLElement {
           const checked = grocySelected === null || grocySelected.includes(l.id);
           return `
         <label class="settings-check-row">
-          <input type="checkbox" class="settings-grocy-check" value="${l.id}" ${checked ? "checked" : ""}>
+          <input type="checkbox" class="settings-grocy-check" value="${__fhEsc(l.id)}" ${checked ? "checked" : ""}>
           <span>${this._esc(l.name)}</span>
         </label>`;
         })
@@ -3808,7 +3885,7 @@ class FamilyHubTodoCard extends HTMLElement {
       const locations = await this._fetchGrocyLocationsCached();
       const defaultId = item.defaultLocationId != null && locations.some((loc) => loc.id === item.defaultLocationId) ? item.defaultLocationId : null;
       locationSelect.innerHTML = locations.length
-        ? locations.map((loc) => `<option value="${loc.id}"${defaultId === loc.id ? " selected" : ""}>${this._esc(loc.name)}</option>`).join("")
+        ? locations.map((loc) => `<option value="${__fhEsc(loc.id)}"${defaultId === loc.id ? " selected" : ""}>${this._esc(loc.name)}</option>`).join("")
         : `<option value="">${this._t("todo.putaway.no_locations", "No locations yet")}</option>`;
     };
 
@@ -3856,7 +3933,7 @@ class FamilyHubTodoCard extends HTMLElement {
           }
           matchListEl.innerHTML = matches
             .map(
-              (m) => `<button type="button" class="putaway-match-option" data-product-id="${m.product_id}" data-name="${this._escAttr(m.name)}">${this._esc(m.name)} <span class="putaway-match-score">${Math.round(m.score * 100)}%</span></button>`
+              (m) => `<button type="button" class="putaway-match-option" data-product-id="${__fhEsc(m.product_id)}" data-name="${this._escAttr(m.name)}">${this._esc(m.name)} <span class="putaway-match-score">${Math.round(m.score * 100)}%</span></button>`
             )
             .join("");
           matchListEl.querySelectorAll(".putaway-match-option").forEach((btn) => {
@@ -4007,7 +4084,7 @@ class FamilyHubTodoCard extends HTMLElement {
       </div>
       ${isGrocy
         ? `<label>${this._t("todo.item_detail.note_label", "Note")}<textarea data-fh-placeholder="text.add_a_note" class="detail-note" rows="4" placeholder="${__fhT("text.add_a_note", "Add a note…", null, "h")}">${this._esc(item.note || "")}</textarea></label>
-           <label>${this._t("todo.item_detail.amount_label", "Amount")}<input type="number" class="detail-amount" min="0" step="0.01" value="${item.amount || 1}"></label>`
+           <label>${this._t("todo.item_detail.amount_label", "Amount")}<input type="number" class="detail-amount" min="0" step="0.01" value="${__fhEsc(item.amount || 1)}"></label>`
         : `<label ${supportsDescription ? "" : "hidden"}>${this._t("todo.item_detail.description_label", "Description")}<textarea data-fh-placeholder="text.add_a_description" class="detail-description" rows="4" placeholder="${__fhT("text.add_a_description", "Add a description…", null, "h")}">${this._esc(isWishlist ? wishlistParsed.note : (item.description || ""))}</textarea></label>
            ${isWishlist ? `
            <label>${this._t("todo.item_detail.link_label", "Link")}<input type="url" class="detail-wishlist-link" placeholder="https://…" value="${this._escAttr(wishlistParsed.link)}"></label>

@@ -37,7 +37,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -868,9 +868,9 @@ class FamilyHubPantryCard extends HTMLElement {
     }
   }
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   _escAttr(s) {
     return this._esc(s).replace(/"/g, "&quot;");
@@ -1006,9 +1006,9 @@ class FamilyHubPantryCard extends HTMLElement {
     await Promise.all([this._fetchPickerData(), this._fetchLocations()]);
     const overlay = this._root.querySelector(".add-stock-modal");
     const box = overlay.querySelector(".modal-box");
-    const productOptions = this._pickerProducts.map((p) => `<option value="${p.id}">${this._esc(p.name)}</option>`).join("");
-    const locationOptions = `<option value="">${this._t("pantry.product_default_location", "(product's default)")}</option>` + this._locations.map((l) => `<option value="${l.id}">${this._esc(l.name)}</option>`).join("");
-    const unitOptions = this._pickerUnits.map((u) => `<option value="${u.id}">${this._esc(u.name)}</option>`).join("");
+    const productOptions = this._pickerProducts.map((p) => `<option value="${__fhEsc(p.id)}">${this._esc(p.name)}</option>`).join("");
+    const locationOptions = `<option value="">${this._t("pantry.product_default_location", "(product's default)")}</option>` + this._locations.map((l) => `<option value="${__fhEsc(l.id)}">${this._esc(l.name)}</option>`).join("");
+    const unitOptions = this._pickerUnits.map((u) => `<option value="${__fhEsc(u.id)}">${this._esc(u.name)}</option>`).join("");
     box.innerHTML = `
       <h3>${this._t("pantry.add_stock_title", "Add stock")}</h3>
       <label class="existing-product-field">${this._t("pantry.product_label", "Product")}
@@ -1126,7 +1126,7 @@ class FamilyHubPantryCard extends HTMLElement {
       this._fetchLocations(),
     ]);
     const entries = (entriesResult && Array.isArray(entriesResult.entries)) ? entriesResult.entries : [];
-    const locationOptions = `<option value="">${this._t("pantry.product_default_location", "(product's default)")}</option>` + this._locations.map((l) => `<option value="${l.id}">${this._esc(l.name)}</option>`).join("");
+    const locationOptions = `<option value="">${this._t("pantry.product_default_location", "(product's default)")}</option>` + this._locations.map((l) => `<option value="${__fhEsc(l.id)}">${this._esc(l.name)}</option>`).join("");
     // price/location per entry, alongside the original amount/
     // best-before - see _ws_update_grocy_stock_entry's own docstring on why
     // both are optional on the backend (a blank price field just omits
@@ -1135,13 +1135,13 @@ class FamilyHubPantryCard extends HTMLElement {
       ? entries
           .map(
             (en) => `
-        <div class="entry-row" data-entry-id="${en.id}">
+        <div class="entry-row" data-entry-id="${__fhEsc(en.id)}">
           <div class="entry-row-fields">
-            <label>${this._t("pantry.amount_label", "Amount")}<input type="number" class="entry-amount" min="0" step="any" value="${en.amount}"></label>
-            <label>${this._t("pantry.best_before_short_label", "Best before")}<input type="date" class="entry-best-before" value="${en.best_before_date || ""}"></label>
+            <label>${this._t("pantry.amount_label", "Amount")}<input type="number" class="entry-amount" min="0" step="any" value="${__fhEsc(en.amount)}"></label>
+            <label>${this._t("pantry.best_before_short_label", "Best before")}<input type="date" class="entry-best-before" value="${__fhEsc(en.best_before_date || "")}"></label>
           </div>
           <div class="entry-row-fields">
-            <label>${this._t("pantry.price_label", "Price")}<input type="number" class="entry-price" min="0" step="any" placeholder="e.g. 3.99" value="${en.price != null ? en.price : ""}"></label>
+            <label>${this._t("pantry.price_label", "Price")}<input type="number" class="entry-price" min="0" step="any" placeholder="e.g. 3.99" value="${en.price != null ? __fhEsc(en.price) : ""}"></label>
             <label>${this._t("pantry.location_label", "Location")}<select class="entry-location">${locationOptions}</select></label>
           </div>
         </div>`
@@ -1223,12 +1223,12 @@ class FamilyHubPantryCard extends HTMLElement {
     }
     const categoryOptions =
       `<option value="">${this._t("common.none", "None")}</option>` +
-      this._categories.map((c) => `<option value="${c.id}">${this._esc(c.name)}</option>`).join("") +
+      this._categories.map((c) => `<option value="${__fhEsc(c.id)}">${this._esc(c.name)}</option>`).join("") +
       `<option value="__new__">${this._t("pantry.new_category_option", "+ New category...")}</option>`;
     const locationOptions =
-      this._locations.map((l) => `<option value="${l.id}">${this._esc(l.name)}</option>`).join("") +
+      this._locations.map((l) => `<option value="${__fhEsc(l.id)}">${this._esc(l.name)}</option>`).join("") +
       `<option value="__new__">${this._t("pantry.new_location_option", "+ New location...")}</option>`;
-    const unitOptions = this._pickerUnits.map((u) => `<option value="${u.id}">${this._esc(u.name)}</option>`).join("");
+    const unitOptions = this._pickerUnits.map((u) => `<option value="${__fhEsc(u.id)}">${this._esc(u.name)}</option>`).join("");
     box.innerHTML = `
       <h3>${this._t("pantry.edit_product_title", "Edit product")}</h3>
       <label>${this._t("pantry.name_label", "Name")}<input type="text" class="f-name" value="${this._escAttr(product.name)}"></label>
@@ -1238,7 +1238,7 @@ class FamilyHubPantryCard extends HTMLElement {
       <input data-fh-placeholder="text.new_location_name" type="text" class="f-new-location-name" hidden placeholder="${__fhT("text.new_location_name", "New location name", null, "h")}">
       <label>${this._t("pantry.stock_unit_label", "Stock unit")}<select class="f-qu-stock">${unitOptions}</select></label>
       <label>${this._t("pantry.purchase_unit_label", "Purchase unit")}<select class="f-qu-purchase">${unitOptions}</select></label>
-      <label>${this._t("pantry.min_stock_amount_label", "Min stock amount")}<input type="number" class="f-min-stock" min="0" step="any" value="${product.min_stock_amount || 0}"></label>
+      <label>${this._t("pantry.min_stock_amount_label", "Min stock amount")}<input type="number" class="f-min-stock" min="0" step="any" value="${__fhEsc(product.min_stock_amount || 0)}"></label>
       <label>${this._t("pantry.description_label", "Description")}<textarea class="f-description" rows="2">${this._esc(product.description || "")}</textarea></label>
       <div class="modal-actions product-modal-actions">
         <button class="delete-btn">${this._t("pantry.delete_product_button", "Delete product")}</button>
@@ -1360,7 +1360,7 @@ class FamilyHubPantryCard extends HTMLElement {
       <label>${this._t("pantry.name_label", "Name")}<input data-fh-placeholder="text.e_g_paper_towels_garage_backup" type="text" class="f-name" value="${extra ? this._escAttr(extra.name) : ""}" placeholder="${__fhT("text.e_g_paper_towels_garage_backup", "e.g. Paper towels (garage backup)", null, "h")}"></label>
       <label>${this._t("pantry.quantity_label", "Quantity")}<input data-fh-placeholder="text.e_g_2_rolls" type="text" class="f-quantity" value="${extra ? this._escAttr(extra.quantity || "") : ""}" placeholder="${__fhT("text.e_g_2_rolls", "e.g. 2 rolls", null, "h")}"></label>
       <label>${this._t("pantry.location_label", "Location")}<input data-fh-placeholder="text.e_g_garage_shelf" type="text" class="f-location" value="${extra ? this._escAttr(extra.location || "") : ""}" placeholder="${__fhT("text.e_g_garage_shelf", "e.g. Garage shelf", null, "h")}"></label>
-      <label>${this._t("pantry.expiration_date_label", "Expiration date (optional)")}<input type="date" class="f-expiration" value="${extra && extra.expiration_date ? extra.expiration_date : ""}"></label>
+      <label>${this._t("pantry.expiration_date_label", "Expiration date (optional)")}<input type="date" class="f-expiration" value="${extra && extra.expiration_date ? __fhEsc(extra.expiration_date) : ""}"></label>
       <label>${this._t("pantry.notes_label", "Notes")}<textarea class="f-notes" rows="2">${extra ? this._esc(extra.notes || "") : ""}</textarea></label>
       <div class="modal-actions">
         <button class="cancel-btn">${this._t("common.cancel", "Cancel")}</button>
@@ -1421,17 +1421,17 @@ class FamilyHubPantryCard extends HTMLElement {
     const badgesHtml = badgeBits.length ? `<div class="stock-badges">${badgeBits.join("")}</div>` : "";
     const unitHtml = item.unit_name ? ` ${this._esc(item.unit_name)}` : "";
     return `
-      <div class="stock-row" data-product-id="${item.product_id}">
+      <div class="stock-row" data-product-id="${__fhEsc(item.product_id)}">
         <div class="stock-info">
           <div class="stock-name">${this._esc(item.name)}</div>
           ${badgesHtml}
           ${bestBeforeHtml}
         </div>
-        <div class="stock-amount">${item.amount}${unitHtml}</div>
+        <div class="stock-amount">${__fhEsc(item.amount)}${unitHtml}</div>
         <div class="stock-actions">
-          <button class="stock-editproduct-btn" data-product-id="${item.product_id}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.edit_product_title", "Edit product"))}">&#9881;&#65039;</button>
-          <button class="stock-edit-btn" data-product-id="${item.product_id}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.edit_entries_button_title", "Edit entries"))}">&#9999;&#65039;</button>
-          <button class="stock-remove-btn" data-product-id="${item.product_id}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.remove_stock_button_title", "Remove stock"))}">&minus;</button>
+          <button class="stock-editproduct-btn" data-product-id="${__fhEsc(item.product_id)}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.edit_product_title", "Edit product"))}">&#9881;&#65039;</button>
+          <button class="stock-edit-btn" data-product-id="${__fhEsc(item.product_id)}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.edit_entries_button_title", "Edit entries"))}">&#9999;&#65039;</button>
+          <button class="stock-remove-btn" data-product-id="${__fhEsc(item.product_id)}" data-name="${this._escAttr(item.name)}" title="${this._escAttr(this._t("pantry.remove_stock_button_title", "Remove stock"))}">&minus;</button>
         </div>
       </div>
     `;
@@ -1443,7 +1443,7 @@ class FamilyHubPantryCard extends HTMLElement {
     const metaHtml = metaBits.length ? `<div class="extra-meta">${metaBits.join(" &middot; ")}</div>` : "";
     const notesHtml = extra.notes ? `<div class="extra-notes">${this._esc(extra.notes)}</div>` : "";
     return `
-      <div class="extra-row" data-id="${extra.id}">
+      <div class="extra-row" data-id="${__fhEsc(extra.id)}">
         <div class="stock-info">
           <div class="stock-name">${this._esc(extra.name)}</div>
           ${metaHtml}
@@ -1451,8 +1451,8 @@ class FamilyHubPantryCard extends HTMLElement {
           ${expiryHtml}
         </div>
         <div class="stock-actions">
-          <button class="extra-edit-btn" data-id="${extra.id}" title="${this._escAttr(this._t("common.edit", "Edit"))}">&#9999;&#65039;</button>
-          <button class="extra-delete-btn" data-id="${extra.id}" title="${this._escAttr(this._t("pantry.stop_tracking_button_title", "Stop tracking"))}">&times;</button>
+          <button class="extra-edit-btn" data-id="${__fhEsc(extra.id)}" title="${this._escAttr(this._t("common.edit", "Edit"))}">&#9999;&#65039;</button>
+          <button class="extra-delete-btn" data-id="${__fhEsc(extra.id)}" title="${this._escAttr(this._t("pantry.stop_tracking_button_title", "Stop tracking"))}">&times;</button>
         </div>
       </div>
     `;

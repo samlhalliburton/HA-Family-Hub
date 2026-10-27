@@ -36,7 +36,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -1522,7 +1522,7 @@ color: var(--fc-text);
     if (current && !options.some((o) => o.value === current)) {
       options.push({ value: current, label: current });
     }
-    select.innerHTML = options.map((o) => `<option value="${o.value.replace(/"/g, "&quot;")}">${o.label}</option>`).join("");
+    select.innerHTML = options.map((o) => `<option value="${o.value.replace(/"/g, "&quot;")}">${__fhEsc(o.label)}</option>`).join("");
     select.value = current;
     this._updateStatus();
   }

@@ -121,7 +121,91 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+};
+// URL allowlist for href/src built from data (recipe links, photos, todo
+// links). Only http(s), mailto/tel (links) and same-origin paths pass;
+// javascript:, vbscript:, and non-image data: URLs never do. Returns ""
+// for anything else. Image data: URLs are allowed only when forImg is true.
+var __fhSafeUrl = function (u, forImg) {
+  var raw = String(u == null ? "" : u);
+  var s = "";
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw.charCodeAt(i);
+    // drop whitespace/control/zero-width characters browsers ignore inside a scheme ("java\tscript:")
+    if (c <= 32 || (c >= 127 && c <= 159) || (c >= 8203 && c <= 8207) || c === 8232 || c === 8233 || c === 65279) continue;
+    s += raw.charAt(i);
+  }
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return String(u).trim();
+  if (/^\/(?![\/\\])/.test(s)) return String(u).trim();
+  if (!forImg && /^(mailto|tel):/i.test(s)) return String(u).trim();
+  if (forImg && /^data:image\/(png|jpe?g|gif|webp|avif);/i.test(s)) return String(u).trim();
+  return "";
+};
+// A URL for use inside CSS url('...') within a double-quoted style attribute:
+// scheme-checked, quote/paren/space characters percent-encoded, then HTML-escaped.
+var __fhCssUrl = function (u) {
+  var s = __fhSafeUrl(u, true);
+  if (!s) return "";
+  return __fhEsc(s.replace(/[\s'"()\\]/g, function (c) { return "%" + ("0" + c.charCodeAt(0).toString(16).toUpperCase()).slice(-2); }));
+};
+// Allow-list HTML sanitizer for markup that arrives from outside this card
+// (Grocy recipe descriptions, imported recipe pages). Parsing happens in an
+// inert DOMParser document, so nothing runs or loads while it is cleaned.
+// Unknown tags are unwrapped, dangerous ones removed with their contents,
+// and every attribute not on the short list below is dropped.
+var __fhSanitizeHtml = function (html) {
+  var KEEP = { A: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, BR: 1, P: 1, UL: 1, OL: 1, LI: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, HR: 1, SPAN: 1, DIV: 1, IMG: 1, SUB: 1, SUP: 1, SMALL: 1, BLOCKQUOTE: 1, CODE: 1, PRE: 1, TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TD: 1, TH: 1 };
+  var DROP = { SCRIPT: 1, STYLE: 1, IFRAME: 1, FRAME: 1, FRAMESET: 1, OBJECT: 1, EMBED: 1, SVG: 1, MATH: 1, TEMPLATE: 1, NOSCRIPT: 1, LINK: 1, META: 1, BASE: 1, TITLE: 1, FORM: 1, INPUT: 1, BUTTON: 1, TEXTAREA: 1, SELECT: 1, OPTION: 1, AUDIO: 1, VIDEO: 1, SOURCE: 1, CANVAS: 1, APPLET: 1 };
+  var doc;
+  try {
+    doc = new DOMParser().parseFromString("<!doctype html><body>" + String(html == null ? "" : html), "text/html");
+  } catch (e) {
+    return __fhEsc(html);
+  }
+  var clean = function (node) {
+    Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+      if (child.nodeType === 3) return;
+      if (child.nodeType !== 1) {
+        node.removeChild(child);
+        return;
+      }
+      var tag = child.tagName.toUpperCase();
+      if (DROP[tag]) {
+        node.removeChild(child);
+        return;
+      }
+      clean(child);
+      if (!KEEP[tag]) {
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        node.removeChild(child);
+        return;
+      }
+      Array.prototype.slice.call(child.attributes).forEach(function (a) {
+        var n = a.name.toLowerCase();
+        if (tag === "A" && n === "href") {
+          var h = __fhSafeUrl(a.value, false);
+          if (h) child.setAttribute("href", h);
+          else child.removeAttribute(a.name);
+        } else if (tag === "IMG" && n === "src") {
+          var src = __fhSafeUrl(a.value, true);
+          if (src) child.setAttribute("src", src);
+          else child.removeAttribute(a.name);
+        } else if ((tag === "IMG" && n === "alt") || ((tag === "A" || tag === "IMG") && n === "title")) {
+          /* plain-text attributes - kept */
+        } else {
+          child.removeAttribute(a.name);
+        }
+      });
+      if (tag === "A") {
+        child.setAttribute("rel", "noopener noreferrer");
+        child.setAttribute("target", "_blank");
+      }
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML;
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -598,9 +682,9 @@ const isSelected = selectMode && this._recipeBoxSelectedUids.has(r.uid);
 const initial = (r.name || "?").trim().charAt(0).toUpperCase();
 if (isListView) {
 const media = r.image
-? `<div class="recipe-row-media" style="background-image:url('${String(r.image).replace(/'/g, "%27")}')"></div>`
+? `<div class="recipe-row-media" style="background-image:url('${__fhCssUrl(r.image)}')"></div>`
 : `<div class="recipe-row-media recipe-row-media-placeholder"><span>${initial}</span></div>`;
-const category = r.category ? `<span class="recipe-row-category">${r.category}</span>` : "";
+const category = r.category ? `<span class="recipe-row-category">${__fhEsc(r.category)}</span>` : "";
 const trailing = selectMode
 ? `<div class="recipe-row-select-badge">${isSelected ? "&#10003;" : ""}</div>`
 : `<div class="recipe-row-actions">
@@ -610,16 +694,16 @@ const trailing = selectMode
 return `<div class="recipe-row ${isSelected ? "is-selected" : ""}" data-idx="${idx}">
 ${media}
 <div class="recipe-row-body">
-<div class="recipe-row-name">${r.name}</div>
+<div class="recipe-row-name">${__fhEsc(r.name)}</div>
 ${category}
 </div>
 ${trailing}
 </div>`;
 }
 const media = r.image
-? `<div class="recipe-card-media" style="background-image:url('${String(r.image).replace(/'/g, "%27")}')"></div>`
+? `<div class="recipe-card-media" style="background-image:url('${__fhCssUrl(r.image)}')"></div>`
 : `<div class="recipe-card-media recipe-card-media-placeholder"><span>${initial}</span></div>`;
-const category = r.category ? `<span class="recipe-card-category">${r.category}</span>` : "";
+const category = r.category ? `<span class="recipe-card-category">${__fhEsc(r.category)}</span>` : "";
 const overlay = selectMode
 ? `<div class="recipe-card-select-badge">${isSelected ? "&#10003;" : ""}</div>`
 : `<button type="button" class="recipe-card-heart ${isLoved ? "is-loved" : ""}" data-idx="${idx}" title="${isLoved ? this._t("recipe_box.remove_from_loved", "Remove from loved") : this._t("recipe_box.love_this_dish", "Love this dish")}">${isLoved ? "&#10084;&#65039;" : "&#129293;"}</button>
@@ -628,7 +712,7 @@ return `<div class="recipe-card ${isSelected ? "is-selected" : ""}" data-idx="${
 ${media}
 ${overlay}
 <div class="recipe-card-body">
-<div class="recipe-card-name">${r.name}</div>
+<div class="recipe-card-name">${__fhEsc(r.name)}</div>
 ${category}
 </div>
 </div>`;
@@ -897,7 +981,7 @@ const ratingHtml =
 ? `<span data-fh-t="text.loved" class="event-info-chip" style="background:#f2ddd4">${__fhT("text.loved", "❤️ Loved", null, "h")}</span>`
 : recipe.rating === "down"
 ? `<span data-fh-t="text.not_a_fan" class="event-info-chip" style="background:#d8e3e0">${__fhT("text.not_a_fan", "👎 Not a fan", null, "h")}</span>`
-: "") + (recipe.category ? `<span class="event-info-chip">${recipe.category}</span>` : "");
+: "") + (recipe.category ? `<span class="event-info-chip">${__fhEsc(recipe.category)}</span>` : "");
 root.querySelector(".dish-detail-rating").innerHTML = ratingHtml;
 root.querySelector(".dish-detail-desc").textContent = recipe.description || __fhT("text.no_notes_added", "No notes added.");
 const stepsEl = root.querySelector(".dish-detail-steps");
@@ -982,7 +1066,9 @@ _fhEscapeHtml(s) {
 return String(s == null ? "" : s)
 .replace(/&/g, "&amp;")
 .replace(/</g, "&lt;")
-.replace(/>/g, "&gt;");
+.replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;")
+.replace(/'/g, "&#39;");
 },
 _fhParsePreparationBlocks(inner) {
 const blocks = [];
@@ -1022,17 +1108,17 @@ checkedSteps = checkedSteps || new Set();
 let stepNum = 0;
 const rows = blocks.map((b, idx) => {
 if (b.type === "header") {
-return `<div class="grocy-recipe-step-header">${b.text || ""}</div>`;
+return `<div class="grocy-recipe-step-header">${__fhSanitizeHtml(b.text || "")}</div>`;
 }
 if (b.type === "divider") {
 return `<hr class="grocy-recipe-step-divider" />`;
 }
 if (b.type === "image") {
-return `<div class="grocy-recipe-step-image-wrap"><img class="grocy-recipe-step-image" src="${b.url || ""}" /></div>`;
+return `<div class="grocy-recipe-step-image-wrap"><img class="grocy-recipe-step-image" src="${__fhEsc(__fhSafeUrl(b.url, true))}" /></div>`;
 }
 stepNum++;
 const checked = checkedSteps.has(idx) ? " checked-off" : "";
-return `<label class="grocy-recipe-instruction-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-instruction-check"${checked ? " checked" : ""} /><span class="grocy-recipe-instruction-badge">${stepNum}</span><span class="grocy-recipe-instruction-text">${b.text || ""}</span></label>`;
+return `<label class="grocy-recipe-instruction-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-instruction-check"${checked ? " checked" : ""} /><span class="grocy-recipe-instruction-badge">${stepNum}</span><span class="grocy-recipe-instruction-text">${__fhSanitizeHtml(b.text || "")}</span></label>`;
 });
 return `<div data-fh-t="text.instructions" class="grocy-recipe-instructions-title">${__fhT("text.instructions", "Instructions", null, "h")}</div>` + rows.join("");
 },
@@ -1156,13 +1242,13 @@ if (b.type === "divider") {
 return `<div class="fh-step-editor-row fh-step-editor-divider-row" data-idx="${idx}">${dragHandle}<span class="fh-step-editor-divider-label">&mdash; divider &mdash;</span>${controls}</div>`;
 }
 if (b.type === "image") {
-return `<div class="fh-step-editor-row fh-step-editor-image-row" data-idx="${idx}">${dragHandle}<img class="fh-step-editor-image-preview" src="${b.url || ""}" />${controls}</div>`;
+return `<div class="fh-step-editor-row fh-step-editor-image-row" data-idx="${idx}">${dragHandle}<img class="fh-step-editor-image-preview" src="${__fhEsc(__fhSafeUrl(b.url || "", true))}" />${controls}</div>`;
 }
 return (
 `<div class="fh-step-editor-row fh-step-editor-step-row" data-idx="${idx}">` +
 dragHandle +
 `<span class="fh-step-editor-step-num">${idx + 1}</span>` +
-`<textarea data-fh-placeholder="text.step_text" class="fh-step-editor-text-input" data-idx="${idx}" placeholder="${__fhT("text.step_text", "Step text", null, "h")}">${b.text || ""}</textarea>` +
+`<textarea data-fh-placeholder="text.step_text" class="fh-step-editor-text-input" data-idx="${idx}" placeholder="${__fhT("text.step_text", "Step text", null, "h")}">${__fhEsc(b.text || "")}</textarea>` +
 controls +
 `</div>`
 );
@@ -1440,7 +1526,7 @@ if (this._grocyRecipeViewerTabs) {
 tabsEl.innerHTML = this._grocyRecipeViewerTabs
 .map(
 (t) =>
-`<button type="button" class="grocy-recipe-viewer-tab-btn ${String(t.id) === String(recipeId) ? "active" : ""}" data-recipe-tab-id="${t.id}">${t.name || __fhT("text.recipe", "Recipe", null, "h")}</button>`
+`<button type="button" class="grocy-recipe-viewer-tab-btn ${String(t.id) === String(recipeId) ? "active" : ""}" data-recipe-tab-id="${__fhEsc(t.id)}">${(t.name ? __fhEsc(t.name) : __fhT("text.recipe", "Recipe", null, "h"))}</button>`
 )
 .join("");
 tabsEl.style.display = "flex";
@@ -1645,7 +1731,7 @@ const statDefs = [
 ["Total", recipe.total_time],
 ].filter(([, value]) => (value || "").trim());
 statsEl.innerHTML = statDefs
-.map(([label, value]) => `<div class="grocy-recipe-stat"><span class="grocy-recipe-stat-label">${label}</span><span class="grocy-recipe-stat-value">${value}</span></div>`)
+.map(([label, value]) => `<div class="grocy-recipe-stat"><span class="grocy-recipe-stat-label">${__fhEsc(label)}</span><span class="grocy-recipe-stat-value">${__fhEsc(value)}</span></div>`)
 .join("");
 this._grocyViewerOverlay().querySelector(".grocy-recipe-viewer-servings").textContent = recipe.servings
 ? __fhT("text.makes_x_serving_x", "Makes %0% serving%1%", {0: recipe.servings, 1: recipe.servings === 1 ? "" : "s"})
@@ -1713,7 +1799,7 @@ return;
 const baseServings = this._grocyRecipeViewerBaseServings || 1;
 const servings = this._grocyRecipeViewerServings || baseServings;
 const ratio = baseServings > 0 ? servings / baseServings : 1;
-let html = this._scaleIngredientsDescriptionHtml(raw, ratio);
+let html = this._scaleIngredientsDescriptionHtml(__fhSanitizeHtml(raw), ratio);
 
 // Recipes imported via this card's own "Import a recipe from a link"
 // flow (_createImportedGrocyRecipe, task #158/#223) write a predictable
@@ -1770,7 +1856,7 @@ const accordionHtml =
 `<span data-fh-t="text.written_out_ingredients_list" class="theme-section-label">${__fhT("text.written_out_ingredients_list", "Written-out ingredients list", null, "h")}</span>` +
 `<span class="accordion-chevron">&#9660;</span>` +
 `</button>` +
-`<div class="accordion-body" id="recipe-viewer-ingredients-body"><ul>${ingredientsBlockMatch[1]}</ul></div>` +
+`<div class="accordion-body" id="recipe-viewer-ingredients-body"><ul>${__fhEsc(ingredientsBlockMatch[1])}</ul></div>` +
 `</div>`;
 html = html.replace(ingredientsBlockMatch[0], accordionHtml);
 }
@@ -1990,9 +2076,9 @@ let groupHtml = "";
 const group = ing.group || "";
 if (group !== lastGroup) {
 lastGroup = group;
-if (group) groupHtml = `<div class="grocy-recipe-ingredient-group">${group}</div>`;
+if (group) groupHtml = `<div class="grocy-recipe-ingredient-group">${__fhEsc(group)}</div>`;
 }
-const note = ing.note ? ` <span class="grocy-recipe-ingredient-note">(${ing.note})</span>` : "";
+const note = ing.note ? ` <span class="grocy-recipe-ingredient-note">(${__fhEsc(ing.note)})</span>` : "";
 const amountText = this._formatScaledIngredientAmount(ing, ratio);
 // Numbered circular badge (task #251/mockup) in place of the amount
 // leading the row - the amount itself moves down alongside the
@@ -2002,7 +2088,7 @@ const amountText = this._formatScaledIngredientAmount(ing, ratio);
 // <label> so tapping anywhere on the row toggles it, not just the
 // small checkbox hit target itself.
 const checked = this._grocyRecipeViewerCheckedIngredients && this._grocyRecipeViewerCheckedIngredients.has(idx) ? " checked-off" : "";
-return `${groupHtml}<label class="grocy-recipe-ingredient-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-ingredient-check"${checked ? " checked" : ""} /><span class="grocy-recipe-ingredient-badge">${idx + 1}</span><span><span class="grocy-recipe-ingredient-amount">${amountText}</span> ${ing.product || ""}${note}</span></label>`;
+return `${groupHtml}<label class="grocy-recipe-ingredient-row${checked}" data-idx="${idx}"><input type="checkbox" class="grocy-recipe-ingredient-check"${checked ? " checked" : ""} /><span class="grocy-recipe-ingredient-badge">${idx + 1}</span><span><span class="grocy-recipe-ingredient-amount">${__fhEsc(amountText)}</span> ${__fhEsc(ing.product || "")}${note}</span></label>`;
 })
 .join("");
 ingredientsEl.querySelectorAll(".grocy-recipe-ingredient-row").forEach((row) => {

@@ -13,7 +13,7 @@
 // something else is never overwritten.
 var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null, fb: {}, loading: null, loaded: null });
 var __fhEsc = function (s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
@@ -2068,20 +2068,20 @@ class FamilyHubRewardsCard extends HTMLElement {
       ? this._t("rewards.goal.progress_count", "%current% / %target% logged", { current, target })
       : (current >= target ? this._t("common.done", "Done") : this._t("rewards.goal.not_yet_done", "Not yet done"));
     let actions = "";
-    if (canLog) actions += `<button type="button" class="goal-log-btn" data-id="${goal.id}">${target > 1 ? this._t("rewards.goal.log_progress", "Log progress") : this._t("rewards.goal.mark_done", "Mark done")}</button>`;
+    if (canLog) actions += `<button type="button" class="goal-log-btn" data-id="${__fhEsc(goal.id)}">${target > 1 ? this._t("rewards.goal.log_progress", "Log progress") : this._t("rewards.goal.mark_done", "Mark done")}</button>`;
     if (goal.status === GOAL_STATUS_PENDING_VERIFICATION) {
       if (this._canVerify()) {
-        actions += `<button type="button" class="goal-approve-btn" data-id="${goal.id}">${this._t("rewards.goal.approve", "Approve")}</button>`;
-        actions += `<button type="button" class="goal-reject-btn" data-id="${goal.id}">${this._t("rewards.goal.send_back", "Send back")}</button>`;
+        actions += `<button type="button" class="goal-approve-btn" data-id="${__fhEsc(goal.id)}">${this._t("rewards.goal.approve", "Approve")}</button>`;
+        actions += `<button type="button" class="goal-reject-btn" data-id="${__fhEsc(goal.id)}">${this._t("rewards.goal.send_back", "Send back")}</button>`;
       } else actions += `<span class="suggestion-pending">${this._t("rewards.goal.awaiting_approval", "Awaiting approval")}</span>`;
     } else if (goal.status === GOAL_STATUS_APPROVED) {
       actions += `<span class="suggestion-pending">&#10003; ${this._t("rewards.goal.achieved", "Achieved")}</span>`;
       if (goal.assigned_to === this._myUserId() || this._hasPermission("can_assign")) {
-        actions += `<button type="button" class="goal-complete-btn" data-id="${goal.id}">${this._t("rewards.goal.complete", "Complete")}</button>`;
+        actions += `<button type="button" class="goal-complete-btn" data-id="${__fhEsc(goal.id)}">${this._t("rewards.goal.complete", "Complete")}</button>`;
       }
     }
     return `
-      <div class="suggestion-row goal-row" data-id="${goal.id}">
+      <div class="suggestion-row goal-row" data-id="${__fhEsc(goal.id)}">
         <div class="suggestion-icon">&#127942;</div>
         <div class="suggestion-title">${this._esc(goal.title)}</div>
         <div class="suggestion-by">${this._esc(this._userName(goal.assigned_to))} - ${progressLabel}</div>
@@ -2593,7 +2593,7 @@ class FamilyHubRewardsCard extends HTMLElement {
     }
     el.hidden = false;
     const active = this._activePersonFilter(pills.map((p) => p.id));
-    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     el.innerHTML = pills
       .map((p) => {
         const isActive = active.includes(p.id);
@@ -2611,9 +2611,9 @@ class FamilyHubRewardsCard extends HTMLElement {
     return this._users.filter((u) => this._isChoresIncluded(u.id));
   }
   _esc(s) {
-    const div = document.createElement("div");
-    div.textContent = s == null ? "" : String(s);
-    return div.innerHTML;
+    // Escapes every HTML-significant character (including both quote kinds) so the
+    // result is safe in text AND in quoted attribute values.
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   _build() {
@@ -2934,7 +2934,7 @@ class FamilyHubRewardsCard extends HTMLElement {
     // that authority just sees the plain Reward form exactly as before,
     // same as this modal always worked pre-Goals.
     const showGoalTab = !isEdit && this._canAssignGoals();
-    const memberUsersHtml = this._memberUsers().map((u) => `<option value="${u.id}">${this._esc(u.name)}</option>`).join("");
+    const memberUsersHtml = this._memberUsers().map((u) => `<option value="${__fhEsc(u.id)}">${this._esc(u.name)}</option>`).join("");
     const saveLabel = isEdit
       ? this._t("common.save", "Save")
       : canPrice
@@ -2984,7 +2984,7 @@ class FamilyHubRewardsCard extends HTMLElement {
               <span class="m-icon-cat-chevron">&#9660;</span>
             </button>
             <div class="m-icon-cat-body">
-              ${cat.emojis.map((emoji) => `<button type="button" class="m-icon-choice" data-icon="${emoji}">${emoji}</button>`).join("")}
+              ${cat.emojis.map((emoji) => `<button type="button" class="m-icon-choice" data-icon="${__fhEsc(emoji)}">${emoji}</button>`).join("")}
             </div>
           </div>`
           ).join("")}
@@ -3049,7 +3049,7 @@ class FamilyHubRewardsCard extends HTMLElement {
       }
       const iconToggle = box.querySelector(".m-icon-toggle");
       iconToggle.dataset.icon = existingItem.icon || "";
-      iconToggle.innerHTML = existingItem.icon || "&#127873;";
+      iconToggle.innerHTML = existingItem.icon ? __fhEsc(existingItem.icon) : "&#127873;";
       if (existingItem.color) {
         colorInput.value = existingItem.color;
         colorInput.dataset.touched = "true";
@@ -3123,7 +3123,7 @@ class FamilyHubRewardsCard extends HTMLElement {
     const g = goal || {};
     const rewardType = g.reward_type || "stars";
     const catalogOptions = this._catalog
-      .map((it) => `<option value="${it.id}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${it.cost_stars}&#11088;)</option>`)
+      .map((it) => `<option value="${__fhEsc(it.id)}" ${g.reward_item_id === it.id ? "selected" : ""}>${this._esc(it.title)} (${__fhEsc(it.cost_stars)}&#11088;)</option>`)
       .join("");
     return `
       <label>${this._t("rewards.modal.reward_label", "Reward")}
@@ -3132,7 +3132,7 @@ class FamilyHubRewardsCard extends HTMLElement {
           <option value="catalog_item" ${rewardType === "catalog_item" ? "selected" : ""}>${this._t("rewards.modal.reward_type_catalog_item", "A specific reward from the catalog")}</option>
         </select>
       </label>
-      <label class="g-star-value-field">${this._t("rewards.modal.how_many_stars_label", "How many stars")}<input type="number" class="g-star-value" min="1" value="${g.star_value || 1}"></label>
+      <label class="g-star-value-field">${this._t("rewards.modal.how_many_stars_label", "How many stars")}<input type="number" class="g-star-value" min="1" value="${__fhEsc(g.star_value || 1)}"></label>
       <label class="g-reward-item-field">${this._t("rewards.modal.which_reward_label", "Which reward")}<select class="g-reward-item">${catalogOptions}</select></label>
     `;
   }
@@ -3405,7 +3405,7 @@ class FamilyHubRewardsCard extends HTMLElement {
       <h2>&#11088; ${this._t("rewards.manage_stars.heading", "Manage stars")}</h2>
       <div class="field"><label>${this._t("rewards.manage_stars.who_label", "Who")}</label>
         <select class="manage-stars-user">
-          ${members.map((u) => `<option value="${u.id}" ${u.id === preselect ? "selected" : ""}>${this._esc(u.name)} (${this._balances[u.id] || 0} &#11088;)</option>`).join("")}
+          ${members.map((u) => `<option value="${__fhEsc(u.id)}" ${u.id === preselect ? "selected" : ""}>${this._esc(u.name)} (${__fhEsc(this._balances[u.id] || 0)} &#11088;)</option>`).join("")}
         </select>
       </div>
       <button type="button" class="manage-stars-history-btn">&#128220; ${this._t("rewards.manage_stars.view_history_btn", "View star history")}</button>
@@ -3625,9 +3625,9 @@ class FamilyHubRewardsCard extends HTMLElement {
           rows.length
             ? rows.map((r) => `
               <div class="star-history-row">
-                <span class="star-history-icon">${r.icon}</span>
+                <span class="star-history-icon">${__fhEsc(r.icon)}</span>
                 <span class="star-history-label">${this._esc(r.label)}</span>
-                <span class="star-history-detail">${r.detail}</span>
+                <span class="star-history-detail">${__fhEsc(r.detail)}</span>
                 <span class="star-history-date">${r.at ? this._fmtDate(new Date(r.at)) : ""}</span>
               </div>
             `).join("")
@@ -3662,11 +3662,11 @@ class FamilyHubRewardsCard extends HTMLElement {
     return `
       <div class="balance-card" style="border-color:${this._userColor(user.id)}">
         <span class="balance-dot" style="background:${this._userColor(user.id)}"></span>
-        <button type="button" class="balance-name" data-user="${user.id}" title="${nameTitle}">${this._esc(user.name)}</button>
+        <button type="button" class="balance-name" data-user="${__fhEsc(user.id)}" title="${nameTitle}">${this._esc(user.name)}</button>
         <span class="balance-stars">&#11088; ${bal}</span>
-        ${canGift ? `<button type="button" class="gift-stars-btn" data-user="${user.id}" data-name="${this._esc(user.name)}" title="${this._t("rewards.balance.gift_title", "Gift some of your own stars to %name%", { name: this._esc(user.name) })}">&#127873;</button>` : ""}
-        ${canManage ? `<button type="button" class="manage-stars-for-btn" data-user="${user.id}" title="${this._t("rewards.balance.manage_title", "Manually add or subtract %name%'s stars", { name: this._esc(user.name) })}">&#9998;</button>` : ""}
-        ${isAdmin ? `<span class="balance-adjust"><button class="adjust-minus-btn" data-user="${user.id}">-</button><button class="adjust-plus-btn" data-user="${user.id}">+</button></span>` : ""}
+        ${canGift ? `<button type="button" class="gift-stars-btn" data-user="${__fhEsc(user.id)}" data-name="${this._esc(user.name)}" title="${this._t("rewards.balance.gift_title", "Gift some of your own stars to %name%", { name: this._esc(user.name) })}">&#127873;</button>` : ""}
+        ${canManage ? `<button type="button" class="manage-stars-for-btn" data-user="${__fhEsc(user.id)}" title="${this._t("rewards.balance.manage_title", "Manually add or subtract %name%'s stars", { name: this._esc(user.name) })}">&#9998;</button>` : ""}
+        ${isAdmin ? `<span class="balance-adjust"><button class="adjust-minus-btn" data-user="${__fhEsc(user.id)}">-</button><button class="adjust-plus-btn" data-user="${user.id}">+</button></span>` : ""}
       </div>
     `;
   }
@@ -3700,7 +3700,7 @@ class FamilyHubRewardsCard extends HTMLElement {
       mode === "banked"
         ? `<div class="catalog-bank">${this._t("rewards.catalog.banked_amount", "Banked: %amount% %unit%", { amount: myBank, unit: this._esc(item.stack_unit_label || "") })}</div>`
         : "";
-    const useBankBtn = mode === "banked" && myBank > 0 ? `<button class="catalog-use-bank-btn" data-id="${item.id}">${this._t("rewards.catalog.use_btn", "Use")}</button>` : "";
+    const useBankBtn = mode === "banked" && myBank > 0 ? `<button class="catalog-use-bank-btn" data-id="${__fhEsc(item.id)}">${this._t("rewards.catalog.use_btn", "Use")}</button>` : "";
     // timed rewards ("2 hours of gaming"). The timer is an
     // INDEPENDENT property, not a fourth redeem_mode - the modes describe
     // how the star cost is consumed, the timer describes what happens
@@ -3716,25 +3716,25 @@ class FamilyHubRewardsCard extends HTMLElement {
     const isMyRunningItem = !!(myRewardTimer && myRewardTimer.item_id === item.id);
     const blockedByOtherTimer = timerMinutes > 0 && !!myRewardTimer && !isMyRunningItem;
     const runningRow = isMyRunningItem
-      ? `<div class="catalog-timer-running">&#9201; <span data-timer-uid="${myRewardTimer.uid}">${this._formatTimerRemaining(this._timerRemainingSeconds(myRewardTimer))}</span> ${this._t("rewards.catalog.left_suffix", "left")}
-           <button class="catalog-timer-cancel-btn" data-uid="${myRewardTimer.uid}" title="${this._t("rewards.catalog.stop_timer_title", "Stop this timer")}">&#10005;</button>
+      ? `<div class="catalog-timer-running">&#9201; <span data-timer-uid="${__fhEsc(myRewardTimer.uid)}">${this._formatTimerRemaining(this._timerRemainingSeconds(myRewardTimer))}</span> ${this._t("rewards.catalog.left_suffix", "left")}
+           <button class="catalog-timer-cancel-btn" data-uid="${__fhEsc(myRewardTimer.uid)}" title="${this._t("rewards.catalog.stop_timer_title", "Stop this timer")}">&#10005;</button>
          </div>`
       : "";
     const claimLabel = mode === "banked" ? this._t("common.add", "Add") : timerMinutes > 0 ? this._t("rewards.catalog.use_btn", "Use") : this._t("rewards.catalog.claim_btn", "Claim");
     return `
-      <div class="catalog-item" data-id="${item.id}"${this._catalogAccentStyle(item)}>
-        <div class="catalog-icon">${item.icon || "&#127873;"}</div>
+      <div class="catalog-item" data-id="${__fhEsc(item.id)}"${this._catalogAccentStyle(item)}>
+        <div class="catalog-icon">${(item.icon ? __fhEsc(item.icon) : "&#127873;")}</div>
         <div class="catalog-title">${this._esc(item.title)}</div>
-        <div class="catalog-cost">&#11088; ${item.cost_stars}</div>
+        <div class="catalog-cost">&#11088; ${__fhEsc(item.cost_stars)}</div>
         ${valueNote}
         ${modeBadge}
         ${timerBadge}
         ${bankDisplay}
         ${runningRow}
-        <button class="claim-btn" data-id="${item.id}" data-timer="${timerMinutes}" ${affordable && !blockedByOtherTimer && !isMyRunningItem ? "" : "disabled"} ${blockedByOtherTimer ? `title="${this._t("rewards.catalog.blocked_by_other_timer_title", "You've already got &quot;%title%&quot; running", { title: this._esc(myRewardTimer.title || this._t("rewards.catalog.generic_reward", "a reward")) })}"` : ""}>${isMyRunningItem ? this._t("rewards.catalog.running_btn", "Running") : claimLabel}</button>
+        <button class="claim-btn" data-id="${__fhEsc(item.id)}" data-timer="${timerMinutes}" ${affordable && !blockedByOtherTimer && !isMyRunningItem ? "" : "disabled"} ${blockedByOtherTimer ? `title="${this._t("rewards.catalog.blocked_by_other_timer_title", "You've already got &quot;%title%&quot; running", { title: this._esc(myRewardTimer.title || this._t("rewards.catalog.generic_reward", "a reward")) })}"` : ""}>${isMyRunningItem ? this._t("rewards.catalog.running_btn", "Running") : claimLabel}</button>
         ${useBankBtn}
         <div class="claim-status"></div>
-        ${this._manageOpen ? `<button class="manage-edit-btn" data-id="${item.id}" title="${this._t("common.edit", "Edit")}">&#9998;</button><button class="manage-delete-btn" data-id="${item.id}" title="${this._t("rewards.catalog.remove_title", "Remove")}">&times;</button>` : ""}
+        ${this._manageOpen ? `<button class="manage-edit-btn" data-id="${__fhEsc(item.id)}" title="${this._t("common.edit", "Edit")}">&#9998;</button><button class="manage-delete-btn" data-id="${item.id}" title="${this._t("rewards.catalog.remove_title", "Remove")}">&times;</button>` : ""}
       </div>
     `;
   }
@@ -3746,15 +3746,15 @@ class FamilyHubRewardsCard extends HTMLElement {
     // same _manageOpen-gated convention.
     const actions = this._manageOpen && this._isAdmin()
       ? `<span class="history-actions">
-          <button type="button" class="history-reverse-btn" data-id="${r.id}" title="${this._t("rewards.history.reverse_title", "Reverse - delete and refund the stars")}">&#8634;</button>
-          <button type="button" class="history-delete-btn" data-id="${r.id}" title="${this._t("rewards.history.clear_title", "Clear - delete without refunding")}">&times;</button>
+          <button type="button" class="history-reverse-btn" data-id="${__fhEsc(r.id)}" title="${this._t("rewards.history.reverse_title", "Reverse - delete and refund the stars")}">&#8634;</button>
+          <button type="button" class="history-delete-btn" data-id="${__fhEsc(r.id)}" title="${this._t("rewards.history.clear_title", "Clear - delete without refunding")}">&times;</button>
         </span>`
       : `<span class="history-actions"></span>`;
     return `
       <div class="history-row">
         <span>${this._esc(this._userName(r.user_id))}</span>
         <span>${this._esc(r.title)}</span>
-        <span>&#11088; ${r.cost_stars}</span>
+        <span>&#11088; ${__fhEsc(r.cost_stars)}</span>
         <span class="history-date">${r.redeemed_at ? this._fmtDate(new Date(r.redeemed_at)) : ""}</span>
         ${actions}
       </div>
@@ -3774,13 +3774,13 @@ class FamilyHubRewardsCard extends HTMLElement {
     const actions = canResolve
       ? `<span class="suggestion-actions">
           <input type="number" class="suggestion-cost-input" min="0" placeholder="${this._t("rewards.suggestion.cost_placeholder", "Cost")}">
-          <button type="button" class="suggestion-approve-btn" data-id="${s.id}" title="${this._t("rewards.suggestion.approve_title", "Approve and add to the catalog")}">&#10003;</button>
-          <button type="button" class="suggestion-reject-btn" data-id="${s.id}" title="${this._t("rewards.suggestion.reject_title", "Reject")}">&times;</button>
+          <button type="button" class="suggestion-approve-btn" data-id="${__fhEsc(s.id)}" title="${this._t("rewards.suggestion.approve_title", "Approve and add to the catalog")}">&#10003;</button>
+          <button type="button" class="suggestion-reject-btn" data-id="${__fhEsc(s.id)}" title="${this._t("rewards.suggestion.reject_title", "Reject")}">&times;</button>
         </span>`
       : `<span class="suggestion-pending">${this._t("rewards.suggestion.pending_approval", "Pending approval")}</span>`;
     return `
-      <div class="suggestion-row" data-id="${s.id}">
-        <div class="suggestion-icon">${s.icon || "&#127873;"}</div>
+      <div class="suggestion-row" data-id="${__fhEsc(s.id)}">
+        <div class="suggestion-icon">${(s.icon ? __fhEsc(s.icon) : "&#127873;")}</div>
         <div class="suggestion-title">${this._esc(s.title)}</div>
         <div class="suggestion-by">${this._t("rewards.suggestion.suggested_by", "suggested by %name%", { name: this._esc(this._userName(s.submitted_by)) })}</div>
         ${actions}
@@ -3796,13 +3796,13 @@ class FamilyHubRewardsCard extends HTMLElement {
   // _canAddRewardsDirectly gets the Mark Done button.
   _pendingRowHtml(kind, entry) {
     const canResolve = this._canAddRewardsDirectly();
-    const amountText = kind === "redemption" ? `&#11088; ${entry.cost_stars}` : `${entry.amount} ${this._esc(entry.unit_label || "")}`;
+    const amountText = kind === "redemption" ? `&#11088; ${__fhEsc(entry.cost_stars)}` : `${__fhEsc(entry.amount)} ${this._esc(entry.unit_label || "")}`;
     const when = kind === "redemption" ? entry.redeemed_at : entry.used_at;
     const action = canResolve
-      ? `<span class="suggestion-actions"><button type="button" class="pending-mark-done-btn" data-kind="${kind}" data-id="${entry.id}">${this._t("rewards.pending.mark_done_btn", "Mark done")}</button></span>`
+      ? `<span class="suggestion-actions"><button type="button" class="pending-mark-done-btn" data-kind="${kind}" data-id="${__fhEsc(entry.id)}">${this._t("rewards.pending.mark_done_btn", "Mark done")}</button></span>`
       : `<span class="suggestion-pending">${this._t("rewards.pending.pending_label", "Pending")}</span>`;
     return `
-      <div class="suggestion-row" data-id="${entry.id}">
+      <div class="suggestion-row" data-id="${__fhEsc(entry.id)}">
         <div class="suggestion-icon">${kind === "redemption" ? "&#127873;" : "&#128337;"}</div>
         <div class="suggestion-title">${this._esc(entry.title)}</div>
         <div class="suggestion-by">${this._esc(this._userName(entry.user_id))} - ${amountText}${when ? ` - ${this._fmtDate(new Date(when))}` : ""}</div>
