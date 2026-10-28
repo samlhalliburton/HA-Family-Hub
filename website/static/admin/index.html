@@ -9,7 +9,16 @@
 <!-- Decap Turbo (turbo-github backend) currently requires the beta
      release of decap-cms - see https://decapcms.org/docs/turbo-connecting-a-site/.
      Swap this for the stable decap-cms@^3.0.0 build if a future
-     Decap release folds Turbo support into stable. -->
-<script src="https://cdn.jsdelivr.net/npm/decap-cms@beta/dist/decap-cms.js"></script>
+     Decap release folds Turbo support into stable.
+     Pinned to an exact version with a Subresource Integrity hash so a
+     compromised or republished package can't run inside the admin page
+     (this editor can commit to the main branch). To update: pick the new
+     version, then recompute the hash from the npm tarball:
+       npm pack decap-cms@<version> && tar -xzf decap-cms-<version>.tgz
+       openssl dgst -sha384 -binary package/dist/decap-cms.js | openssl base64 -A
+     and put "sha384-<hash>" in the integrity attribute below. -->
+<script src="https://cdn.jsdelivr.net/npm/decap-cms@3.17.1/dist/decap-cms.js"
+        integrity="sha384-d2pbrhjc5asvSK35gKkrgRIk0Wq+2CQynWnXtSsYWQawXCgBXhcAK737jBAKXT4T"
+        crossorigin="anonymous"></script>
 </body>
 </html>
