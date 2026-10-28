@@ -19,6 +19,26 @@ var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null,
 var __fhEsc = function (s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
+// URL allowlist for href/src built from data (recipe links, photos, todo
+// links). Only http(s), mailto/tel (links) and same-origin paths pass;
+// javascript:, vbscript:, and non-image data: URLs never do. Returns ""
+// for anything else. Image data: URLs are allowed only when forImg is true.
+var __fhSafeUrl = function (u, forImg) {
+  var raw = String(u == null ? "" : u);
+  var s = "";
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw.charCodeAt(i);
+    // drop whitespace/control/zero-width characters browsers ignore inside a scheme ("java\tscript:")
+    if (c <= 32 || (c >= 127 && c <= 159) || (c >= 8203 && c <= 8207) || c === 8232 || c === 8233 || c === 65279) continue;
+    s += raw.charAt(i);
+  }
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return String(u).trim();
+  if (/^\/(?![\/\\])/.test(s)) return String(u).trim();
+  if (!forImg && /^(mailto|tel):/i.test(s)) return String(u).trim();
+  if (forImg && /^data:image\/(png|jpe?g|gif|webp|avif);/i.test(s)) return String(u).trim();
+  return "";
+};
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
   if (g.fb[key] === undefined) g.fb[key] = fb;
@@ -459,7 +479,7 @@ class ThemeBuilderPanel extends HTMLElement {
       <div class="tb-root">
         <div class="tb-header">
           <div>
-            <div class="tb-header-title">${this._iconUrl() ? `<img data-fh-alt="text.family_hub_logo" class="tb-logo" src="${this._iconUrl()}" alt="${__fhT("text.family_hub_logo", "Family Hub logo", null, "h")}" />` : `<span class="tb-icon">&#127912;</span>`}<h1 data-fh-t="text.theme_builder">${__fhT("text.theme_builder", "Theme Builder", null, "h")}</h1></div>
+            <div class="tb-header-title">${this._iconUrl() ? `<img data-fh-alt="text.family_hub_logo" class="tb-logo" src="${__fhEsc(__fhSafeUrl(this._iconUrl(), true))}" alt="${__fhT("text.family_hub_logo", "Family Hub logo", null, "h")}" />` : `<span class="tb-icon">&#127912;</span>`}<h1 data-fh-t="text.theme_builder">${__fhT("text.theme_builder", "Theme Builder", null, "h")}</h1></div>
             <div data-fh-t="text.colors_auto_register_as_selectable_home" class="tb-header-sub">${__fhT("text.colors_auto_register_as_selectable_home", "Colors auto-register as selectable Home Assistant themes. Shadows, glow, and background images are available to cards built to read them.", null, "h")}</div>
           </div>
           <div class="tb-header-actions">

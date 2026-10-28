@@ -2901,10 +2901,10 @@ class FamilyHubTodoCard extends HTMLElement {
     const myId = this._myUserId();
     const claimedByMe = !!(parsed.claimedBy && myId && parsed.claimedBy === myId);
     const imageHtml = parsed.image
-      ? `<img class="wishlist-item-image" src="${this._escAttr(parsed.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+      ? `<img class="wishlist-item-image" src="${__fhEsc(__fhSafeUrl(parsed.image, true))}" alt="" loading="lazy" onerror="this.style.display='none'">`
       : `<div class="wishlist-item-image wishlist-item-image-placeholder">&#127873;</div>`;
     const linkHtml = parsed.link
-      ? `<a class="wishlist-item-link" href="${this._escAttr(parsed.link)}" target="_blank" rel="noopener noreferrer" title="${this._escAttr(this._t("todo.wishlist.open_link", "Open link"))}">&#128279; ${this._t("todo.wishlist.view_link", "View")}</a>`
+      ? `<a class="wishlist-item-link" href="${__fhEsc(__fhSafeUrl(parsed.link))}" target="_blank" rel="noopener noreferrer" title="${this._escAttr(this._t("todo.wishlist.open_link", "Open link"))}">&#128279; ${this._t("todo.wishlist.view_link", "View")}</a>`
       : "";
     // Claim UI is left off entirely for the list's own owner - see
     // _isWishlistOwner's own comment for the "hidden from the owner"
@@ -4091,7 +4091,7 @@ class FamilyHubTodoCard extends HTMLElement {
            <label>${this._t("todo.item_detail.image_label", "Image URL")}<input type="url" class="detail-wishlist-image" placeholder="https://…" value="${this._escAttr(wishlistParsed.image)}"></label>
            <div class="wishlist-image-controls">
              <label class="wishlist-upload-btn">${this._t("todo.add_item.upload_photo", "Upload photo…")}<input type="file" accept="image/*" class="detail-wishlist-image-file" hidden></label>
-             <img class="wishlist-image-preview" alt="" src="${this._escAttr(wishlistParsed.image)}" ${wishlistParsed.image ? "" : "hidden"}>
+             <img class="wishlist-image-preview" alt="" src="${__fhEsc(__fhSafeUrl(wishlistParsed.image, true))}" ${wishlistParsed.image ? "" : "hidden"}>
              <span class="wishlist-image-upload-status"></span>
            </div>` : ""}
            <label ${supportsDueDate ? "" : "hidden"}>${this._t("todo.item_detail.due_date_label", "Due date")}<input type="date" class="detail-due" value="${item.due ? this._escAttr(item.due) : ""}"></label>

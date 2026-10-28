@@ -15,6 +15,26 @@ var __fhI18n = (window.__familyHubI18n = window.__familyHubI18n || { hass: null,
 var __fhEsc = function (s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 };
+// URL allowlist for href/src built from data (recipe links, photos, todo
+// links). Only http(s), mailto/tel (links) and same-origin paths pass;
+// javascript:, vbscript:, and non-image data: URLs never do. Returns ""
+// for anything else. Image data: URLs are allowed only when forImg is true.
+var __fhSafeUrl = function (u, forImg) {
+  var raw = String(u == null ? "" : u);
+  var s = "";
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw.charCodeAt(i);
+    // drop whitespace/control/zero-width characters browsers ignore inside a scheme ("java\tscript:")
+    if (c <= 32 || (c >= 127 && c <= 159) || (c >= 8203 && c <= 8207) || c === 8232 || c === 8233 || c === 65279) continue;
+    s += raw.charAt(i);
+  }
+  if (!s) return "";
+  if (/^https?:/i.test(s)) return String(u).trim();
+  if (/^\/(?![\/\\])/.test(s)) return String(u).trim();
+  if (!forImg && /^(mailto|tel):/i.test(s)) return String(u).trim();
+  if (forImg && /^data:image\/(png|jpe?g|gif|webp|avif);/i.test(s)) return String(u).trim();
+  return "";
+};
 var __fhT = function (key, fb, vars, mode) {
   var g = window.__familyHubI18n || __fhI18n;
   if (g.fb[key] === undefined) g.fb[key] = fb;
@@ -2617,7 +2637,7 @@ background-image: var(--fc-bg-overlay-image, none);
       title: m.name,
       rows,
       actionLabel: m.link ? `\u{1F517} ${this._t("today.detail.open_recipe_link", "Open recipe link")}` : null,
-      actionHandler: m.link ? () => window.open(m.link, "_blank", "noopener") : null,
+      actionHandler: m.link ? () => window.open(__fhSafeUrl(m.link) || "about:blank", "_blank", "noopener") : null,
     });
   }
   _openReminderDetail(r) {

@@ -2160,7 +2160,7 @@ linkRow.querySelector(".dish-detail-open-link").addEventListener("click", () => 
 if (recipe.grocyRecipeId) {
 this._openGrocyRecipeViewer(recipe.grocyRecipeId, recipe.name, recipe.link);
 } else {
-window.open(recipe.link, "_blank", "noopener");
+window.open(__fhSafeUrl(recipe.link) || "about:blank", "_blank", "noopener");
 }
 });
 } else {
@@ -2241,7 +2241,7 @@ return (blocks || [])
 .map((b) => {
 if (b.type === "header") return `<h4>${b.text || ""}</h4>`;
 if (b.type === "divider") return "<hr>";
-if (b.type === "image") return `<p><img src="${(b.url || "").replace(/"/g, "&quot;")}"></p>`;
+if (b.type === "image") return `<p><img src="${__fhEsc(__fhSafeUrl(b.url, true))}"></p>`;
 return `<p>${b.text || ""}</p>`;
 })
 .join("");
@@ -16454,7 +16454,7 @@ if (!entry) return;
 if (entry.grocyRecipeId) {
 this._openGrocyRecipeViewer(entry.grocyRecipeId, entry.name, entry.link, true, this._buildGrocyRecipeViewerTabsForCurrentMeal());
 } else if (entry.link) {
-window.open(entry.link, "_blank", "noopener");
+window.open(__fhSafeUrl(entry.link) || "about:blank", "_blank", "noopener");
 }
 });
 root.querySelector(".meal-view-edit-btn").addEventListener("click", () => this._setMealEditorViewMode(false));
@@ -16503,7 +16503,7 @@ if (entry) {
 if (entry.grocyRecipeId) {
 this._openGrocyRecipeViewer(entry.grocyRecipeId, entry.name, entry.link, true, this._buildGrocyRecipeViewerTabsForCurrentMeal());
 } else if (entry.link) {
-window.open(entry.link, "_blank", "noopener");
+window.open(__fhSafeUrl(entry.link) || "about:blank", "_blank", "noopener");
 }
 }
 }
@@ -16650,7 +16650,7 @@ if (!btn) return;
 this._switchGrocyRecipeViewerTab(btn.dataset.recipeTabId);
 });
 root.querySelector(".grocy-recipe-viewer-open-btn").addEventListener("click", () => {
-if (this._grocyRecipeViewerFallbackLink) window.open(this._grocyRecipeViewerFallbackLink, "_blank", "noopener");
+if (this._grocyRecipeViewerFallbackLink) window.open(__fhSafeUrl(this._grocyRecipeViewerFallbackLink) || "about:blank", "_blank", "noopener");
 });
 root.querySelector(".grocy-recipe-viewer-consume-btn").addEventListener("click", () => this._consumeGrocyRecipeIngredients());
 root.querySelector(".grocy-recipe-viewer-scale-down").addEventListener("click", () => this._adjustGrocyRecipeViewerServings(-1));
@@ -18233,7 +18233,7 @@ ${isPredefined ? `<div class="holiday-bg-date-label">${dateLabel}</div>` : `<but
 </div>
 ${dateRow}
 <div class="holiday-bg-image-row">
-${entry.imageUrl ? `<img class="holiday-bg-preview" src="${esc(entry.imageUrl)}" />` : ""}
+${entry.imageUrl ? `<img class="holiday-bg-preview" src="${esc(__fhSafeUrl(entry.imageUrl, true))}" />` : ""}
 <input type="file" accept="image/*" class="holiday-bg-file-input" data-idx="${idx}" style="display:none" />
 <button type="button" class="btn-cancel holiday-bg-upload-btn" data-idx="${idx}">${entry.imageUrl ? this._t("settings.holiday_change_photo", "Change photo") : this._t("settings.holiday_upload_photo", "Upload photo")}</button>
 ${entry.imageUrl ? `<button type="button" class="btn-cancel holiday-bg-remove-image-btn" data-idx="${idx}">${this._t("settings.holiday_remove_photo", "Remove photo")}</button>` : ""}
@@ -24265,7 +24265,7 @@ const name = this._root.querySelector(".input-name").value.trim();
 if (this._currentGrocyRecipeId) {
 this._openGrocyRecipeViewer(this._currentGrocyRecipeId, name, url, false, this._buildGrocyRecipeViewerTabsForCurrentMeal());
 } else {
-window.open(url, "_blank", "noopener");
+window.open(__fhSafeUrl(url) || "about:blank", "_blank", "noopener");
 }
 }
 // a meal can already have more than one Grocy recipe tied to
@@ -25415,7 +25415,7 @@ imagesEl.appendChild(img);
 });
 const link = overlay.querySelector(".more-custom-link");
 if (item.linkUrl) {
-link.href = item.linkUrl;
+link.href = __fhSafeUrl(item.linkUrl) || "#";
 link.textContent = item.linkLabel || this._t("more_menu.open_link", "Open link");
 link.hidden = false;
 } else {
@@ -25630,7 +25630,7 @@ form.innerHTML = `
 <div class="mm-qr-fields">${this._moreMenuQrFieldsHtml(item.qrType, item.qrFields || {})}</div>
 <div class="mm-qr-preview"></div>
 <label>${t("settings.more_menu_photos", "Photos (up to 2)")}</label>
-<div class="mm-photos">${item.images.map((url, i) => `<div class="mm-photo"><img src="${esc(url)}" alt="" /><button type="button" class="mm-photo-remove" data-index="${i}" aria-label="${t("settings.more_menu_remove", "Remove")}">&#10005;</button></div>`).join("")}${item.images.length < 2 ? `<button type="button" class="mm-photo-add">${t("settings.more_menu_add_photo", "+ Add photo")}</button><input type="file" class="mm-photo-input" accept="image/*" hidden />` : ""}</div>
+<div class="mm-photos">${item.images.map((url, i) => `<div class="mm-photo"><img src="${esc(__fhSafeUrl(url, true))}" alt="" /><button type="button" class="mm-photo-remove" data-index="${i}" aria-label="${t("settings.more_menu_remove", "Remove")}">&#10005;</button></div>`).join("")}${item.images.length < 2 ? `<button type="button" class="mm-photo-add">${t("settings.more_menu_add_photo", "+ Add photo")}</button><input type="file" class="mm-photo-input" accept="image/*" hidden />` : ""}</div>
 <div class="mm-photo-status mm-error"></div>
 <label>${t("settings.more_menu_link", "Link button (optional)")}</label>
 <input type="text" class="mm-link-url" maxlength="1000" placeholder="https://..." value="${esc(item.linkUrl)}" />

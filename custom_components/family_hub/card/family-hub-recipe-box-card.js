@@ -1016,7 +1016,7 @@ linkRow.querySelector(".dish-detail-open-link").addEventListener("click", () => 
 if (recipe.grocyRecipeId) {
 this._openGrocyRecipeViewer(recipe.grocyRecipeId, recipe.name, recipe.link);
 } else {
-window.open(recipe.link, "_blank", "noopener");
+window.open(__fhSafeUrl(recipe.link) || "about:blank", "_blank", "noopener");
 }
 });
 } else {
@@ -1097,7 +1097,7 @@ return (blocks || [])
 .map((b) => {
 if (b.type === "header") return `<h4>${b.text || ""}</h4>`;
 if (b.type === "divider") return "<hr>";
-if (b.type === "image") return `<p><img src="${(b.url || "").replace(/"/g, "&quot;")}"></p>`;
+if (b.type === "image") return `<p><img src="${__fhEsc(__fhSafeUrl(b.url, true))}"></p>`;
 return `<p>${b.text || ""}</p>`;
 })
 .join("");
@@ -2938,7 +2938,7 @@ this._editingDishSteps = recipe ? recipe.steps || [] : [];
       this._switchGrocyRecipeViewerTab(btn.dataset.recipeTabId);
     });
     root.querySelector(".grocy-recipe-viewer-open-btn").addEventListener("click", () => {
-      if (this._grocyRecipeViewerFallbackLink) window.open(this._grocyRecipeViewerFallbackLink, "_blank", "noopener");
+      if (this._grocyRecipeViewerFallbackLink) window.open(__fhSafeUrl(this._grocyRecipeViewerFallbackLink) || "about:blank", "_blank", "noopener");
     });
     root.querySelector(".grocy-recipe-viewer-consume-btn").addEventListener("click", () => this._consumeGrocyRecipeIngredients());
     root.querySelector(".grocy-recipe-viewer-scale-down").addEventListener("click", () => this._adjustGrocyRecipeViewerServings(-1));
