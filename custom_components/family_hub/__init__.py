@@ -1784,15 +1784,12 @@ class FamilyHubSettingsHistoryExportView(HomeAssistantView):
 
 
 @websocket_api.websocket_command({vol.Required("type"): "family_hub/backup_settings_now"})
+@websocket_api.require_admin
 @websocket_api.async_response
 async def _ws_backup_settings_now(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Settings panel's "Back up now" button - see
-    _manual_backup_settings_history's own docstring. Not server-side
-    admin-gated, same as _ws_set_settings/_ws_get_settings just above
-    (every Settings-panel write in this project is frontend-hidden from
-    non-admins via .admin-only-setting, not backend-enforced - see that
-    CSS class's own comment on why) - the card only shows this button to
-    an admin in the first place."""
+    _manual_backup_settings_history's own docstring. Admin-only, enforced
+    server-side (the button is also hidden from non-admins in the card)."""
     entry_data = _get_family_hub_entry_data(hass)
     if entry_data is None:
         connection.send_error(msg["id"], "not_found", "Family Hub is not set up")
@@ -2233,14 +2230,14 @@ async def _build_debug_info(hass: HomeAssistant, entry: ConfigEntry, entry_data:
 
 
 @websocket_api.websocket_command({vol.Required("type"): "family_hub/get_debug_info"})
+@websocket_api.require_admin
 @websocket_api.async_response
 async def _ws_get_debug_info(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     """Powers the card's Debug Info panel + its "Export to file" button -
     see _build_debug_info's own docstring for exactly what's included and
-    why. Not admin-gated: same reasoning as _ws_get_settings just below -
-    this is read-only, diagnostic, and the existing client-side half of
-    the same panel (connection state, fetch errors) was never gated
-    either."""
+    why. Admin-only (enforced here, not just by hiding the Developer tab):
+    it lists every member's profile flags, permission setup and
+    configuration, which only the household's admins need."""
     entry = _get_family_hub_entry(hass)
     entry_data = _get_family_hub_entry_data(hass)
     if entry is None or entry_data is None:
@@ -2644,6 +2641,18 @@ async def _ws_set_settings(
         connection.send_error(msg["id"], "not_found", "Family Hub is not set up")
         return
     store: Store = entry_data["settings_store"]
+    # Reject anything that isn't plain JSON or is absurdly large before it is
+    # persisted (and replicated into backups) - this handler is a full replace
+    # callable by any logged-in account, so an unbounded blob is a cheap way
+    # to bloat storage or break every card's settings load.
+    try:
+        _settings_json_len = len(json.dumps(msg["settings"], separators=(",", ":")))
+    except (TypeError, ValueError):
+        connection.send_error(msg["id"], "invalid_format", "Settings must be plain JSON data")
+        return
+    if _settings_json_len > _MAX_SETTINGS_JSON_BYTES:
+        connection.send_error(msg["id"], "invalid_format", "Settings are too large to save")
+        return
     new_settings = dict(msg["settings"])
     # v1.168.71: PIN hashes are never accepted from a client (that was the
     # "plant a PIN" half of issue #2), and any still in the stored blob are
@@ -6517,7 +6526,76 @@ def _extract_json_ld_recipe(html: str) -> dict | None:
     return None
 
 
+# Upper bound on one saved Settings blob (the whole blob, serialized). Real
+# installs are tens of KB; this leaves generous headroom for inline images
+# and long lists while still refusing runaway payloads.
+_MAX_SETTINGS_JSON_BYTES = 4 * 1024 * 1024
+
 _RECIPE_URL_MAX_REDIRECTS = 5
+
+
+_RECIPE_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+_RECIPE_PAGE_MAX_BYTES = 5 * 1024 * 1024
+
+
+async def _read_capped(resp: "aiohttp.ClientResponse", limit: int) -> bytes:
+    """Read a response body, refusing to buffer more than ``limit`` bytes.
+
+    ``resp.read()`` / ``resp.text()`` pull the whole body into memory first
+    and only then can anyone check its size, so a hostile (or just huge)
+    URL could exhaust Home Assistant's memory. Reading in chunks and
+    stopping at the limit closes that.
+    """
+    declared = resp.content_length
+    if declared is not None and declared > limit:
+        raise RuntimeError("the file is too large to import")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > limit:
+            raise RuntimeError("the file is too large to import")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def _fetch_recipe_image(
+    session: "aiohttp.ClientSession", image_url: str, allow_private: bool
+) -> tuple[bytes, str]:
+    """Download a recipe photo for re-upload to Grocy, safely.
+
+    The photo URL comes from the browser, so it is untrusted input to a
+    request made from the Home Assistant server. Without these checks any
+    logged-in account could point it at an address on the home network and
+    get the response stored as a Grocy recipe picture (and so read back).
+    Same rules as ``parse_recipe_url`` (public http(s) only unless the
+    caller is an admin, redirects followed by hand so every hop is
+    re-checked), plus: the response must actually be an image and is
+    size-capped while it streams, not after it is all in memory.
+    """
+    url = str(image_url).strip()
+    for _hop in range(_RECIPE_URL_MAX_REDIRECTS + 1):
+        block_reason = await _recipe_url_block_reason(url, allow_private)
+        if block_reason:
+            raise RuntimeError(block_reason)
+        async with session.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; FamilyHub-RecipeImport/1.0)"},
+            timeout=aiohttp.ClientTimeout(total=15),
+            allow_redirects=False,
+        ) as img_resp:
+            location = (getattr(img_resp, "headers", None) or {}).get("Location")
+            if img_resp.status in (301, 302, 303, 307, 308) and location:
+                url = urljoin(url, location)
+                continue
+            if img_resp.status != 200:
+                raise RuntimeError(f"couldn't download the recipe photo (HTTP {img_resp.status})")
+            content_type = (img_resp.content_type or "").lower()
+            if not content_type.startswith("image/") or content_type == "image/svg+xml":
+                raise RuntimeError("that link isn't a photo (expected a JPEG, PNG, WebP or GIF image)")
+            image_bytes = await _read_capped(img_resp, _RECIPE_IMAGE_MAX_BYTES)
+            return image_bytes, content_type
+    raise RuntimeError("the photo link redirected too many times")
 
 
 async def _recipe_url_block_reason(url: str, allow_private: bool) -> str | None:
@@ -6616,7 +6694,7 @@ async def _ws_parse_recipe_url(
                 if resp.status != 200:
                     connection.send_result(msg["id"], {"success": False, "error": f"That page returned HTTP {resp.status}"})
                     return
-                html = await resp.text(errors="ignore")
+                html = (await _read_capped(resp, _RECIPE_PAGE_MAX_BYTES)).decode(resp.charset or "utf-8", errors="ignore")
                 break
         if html is None:
             connection.send_result(msg["id"], {"success": False, "error": "That page redirected too many times."})
@@ -9236,13 +9314,10 @@ async def _ws_create_grocy_recipe(
     image_url = msg["image"]
     if image_url:
         try:
-            async with session.get(image_url, timeout=aiohttp.ClientTimeout(total=15)) as img_resp:
-                if img_resp.status != 200:
-                    raise RuntimeError(f"couldn't download the recipe photo (HTTP {img_resp.status})")
-                content_type = img_resp.content_type or ""
-                image_bytes = await img_resp.read()
-            if len(image_bytes) > 8 * 1024 * 1024:
-                raise RuntimeError("the recipe photo was too large to import (over 8 MB)")
+            _img_user = getattr(connection, "user", None)
+            image_bytes, content_type = await _fetch_recipe_image(
+                session, image_url, bool(_img_user is not None and getattr(_img_user, "is_admin", False))
+            )
             file_name = f"family_hub_recipe_{recipe_id}{_guess_image_extension(image_url, content_type)}"
             await _grocy_api_upload_file(session, url, api_key, "recipepictures", file_name, image_bytes, content_type)
             await _grocy_api_put(session, url, api_key, f"/api/objects/recipes/{recipe_id}", {"picture_file_name": file_name})
@@ -9486,13 +9561,10 @@ async def _ws_update_grocy_recipe(
     image_url = msg.get("image")
     if image_url:
         try:
-            async with session.get(image_url, timeout=aiohttp.ClientTimeout(total=15)) as img_resp:
-                if img_resp.status != 200:
-                    raise RuntimeError(f"couldn't download the recipe photo (HTTP {img_resp.status})")
-                content_type = img_resp.content_type or ""
-                image_bytes = await img_resp.read()
-            if len(image_bytes) > 8 * 1024 * 1024:
-                raise RuntimeError("the recipe photo was too large to import (over 8 MB)")
+            _img_user = getattr(connection, "user", None)
+            image_bytes, content_type = await _fetch_recipe_image(
+                session, image_url, bool(_img_user is not None and getattr(_img_user, "is_admin", False))
+            )
             # A fresh filename per save (not reused from creation) - Grocy's
             # file store opens for exclusive create (see
             # _grocy_api_upload_file's own docstring) and re-uploading the
